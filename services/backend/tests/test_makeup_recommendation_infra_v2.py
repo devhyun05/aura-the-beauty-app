@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.db.check_schema import EXPECTED_COLUMNS, EXPECTED_TABLES, build_schema_report
+from app.services import makeup_recommendation_image
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.makeup_recommendation_image import (
   GeneratedRecommendationAsset,
@@ -39,6 +40,68 @@ def _encoded_test_image(size: tuple[int, int] = (640, 320), image_format: str = 
   buffer = BytesIO()
   PillowImage.new("RGB", size, (180, 120, 100)).save(buffer, format=image_format)
   return base64.b64encode(buffer.getvalue()).decode()
+
+
+def _complete_crop_metadata() -> dict:
+  box = {"left": 0.2, "top": 0.2, "right": 0.8, "bottom": 0.8}
+  area_counts = {"base": 1, "brow": 2, "eye": 2, "cheek": 2, "lip": 1}
+  return {
+    "version": "makeup-face-crops-v1",
+    "imageSize": {"width": 128, "height": 128},
+    "areas": {
+      area: [
+        {"regionId": f"{area}-{index}", "box": box}
+        for index in range(count)
+      ]
+      for area, count in area_counts.items()
+    },
+  }
+
+
+def test_personalized_face_metadata_retries_generated_crop_detection(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  crop_metadata = _complete_crop_metadata()
+  monkeypatch.setattr(
+    makeup_recommendation_image,
+    "extract_personalized_makeup_face_metadata",
+    lambda *_args: {},
+  )
+  monkeypatch.setattr(
+    makeup_recommendation_image,
+    "extract_makeup_face_crop_metadata",
+    lambda _image_bytes: crop_metadata,
+  )
+
+  metadata = makeup_recommendation_image._extract_personalized_face_metadata(
+    b"source",
+    b"generated",
+  )
+
+  assert metadata["cropMetadata"] == crop_metadata
+
+
+def test_personalized_face_metadata_rejects_missing_required_crops(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  monkeypatch.setattr(
+    makeup_recommendation_image,
+    "extract_personalized_makeup_face_metadata",
+    lambda *_args: {},
+  )
+  monkeypatch.setattr(
+    makeup_recommendation_image,
+    "extract_makeup_face_crop_metadata",
+    lambda _image_bytes: None,
+  )
+
+  with pytest.raises(AppError) as exc_info:
+    makeup_recommendation_image._extract_personalized_face_metadata(
+      b"source",
+      b"generated",
+    )
+
+  assert exc_info.value.code == "MAKEUP_IMAGE_CROP_METADATA_MISSING"
 
 
 def test_v2_schema_and_checker_cover_taxonomy_sessions_snapshots_and_assets() -> None:
@@ -335,11 +398,7 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
   calls: dict[str, dict] = {}
   uploaded: dict = {}
   face_metadata = {
-    "cropMetadata": {
-      "version": "makeup-face-crops-v1",
-      "imageSize": {"width": 128, "height": 128},
-      "areas": {},
-    },
+    "cropMetadata": _complete_crop_metadata(),
     "alignmentMetadata": {
       "version": "makeup-face-alignment-v1",
       "source": {

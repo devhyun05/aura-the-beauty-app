@@ -17,6 +17,7 @@ import {
   formatMakeupRecommendationHistoryDate,
   isMakeupRecommendationReportAllowedByDiscovery,
   getInitialMakeupRecommendationScreenPhase,
+  getMakeupRecommendationResultPhase,
   getQuestionActionMode,
   getQuestionProgressSegments,
   makeupRecommendationDiscoveryCopy,
@@ -173,6 +174,21 @@ expectEqual(
   getInitialMakeupRecommendationScreenPhase({initialView: 'discovery', reportId: '   '}),
   'discovery',
   'blank report id does not enter report loading',
+);
+expectEqual(
+  getMakeupRecommendationResultPhase('pending', 'loading'),
+  'loading',
+  'pending generated images keep the creation loader visible',
+);
+expectEqual(
+  getMakeupRecommendationResultPhase('completed', 'loading'),
+  'results',
+  'results open only after every generated image completes',
+);
+expectEqual(
+  getMakeupRecommendationResultPhase('partial', 'loading'),
+  'error',
+  'partial image generation opens the retry state',
 );
 expectEqual(
   shouldHandleMakeupRecommendationBack('reportLoading', {directReportEntry: true}),
@@ -335,6 +351,16 @@ expectEqual(screenSource.includes('getFaceAnalysisReportById(reportIdToHydrate)'
 expectEqual(screenSource.includes("type: 'report/detailLoaded'"), true, 'hydrated detail replaces list summary');
 expectEqual(screenSource.includes('reportRegionVisuals: sourceReport?.measurements?.regionVisuals'), true, 'result context receives region visuals');
 expectEqual(screenSource.includes("setPhase('reportLoading')"), true, 'direct report fetch uses neutral loading');
+expectEqual(
+  screenSource.includes('setPhase(getMakeupRecommendationResultPhase('),
+  true,
+  'result navigation is gated by generated image completion',
+);
+expectEqual(
+  screenSource.includes('setErrorMessage(retryErrorMessage);'),
+  true,
+  'failed image retry exits the loading state with an actionable error',
+);
 expectEqual(screenSource.includes('const historyNextOffset = useRef(0);'), true, 'history keeps the server raw-record cursor outside the filtered card list');
 expectEqual(screenSource.includes('historyNextOffset.current = page.nextOffset;'), true, 'history advances using the consumed raw-record count');
 expectEqual(screenSource.includes('setHasMoreHistory(page.hasMore);'), true, 'history continuation follows raw page fullness');
@@ -385,7 +411,9 @@ const preloadedSourceApplyIndex = showHydratedHistoryReportSource.indexOf(
 );
 expectEqual(
   preloadedSourceApplyIndex >= 0
-    && preloadedSourceApplyIndex < showHydratedHistoryReportSource.indexOf("setPhase('results')"),
+    && preloadedSourceApplyIndex < showHydratedHistoryReportSource.indexOf(
+      "presentSession(restored, 'reportLoading')",
+    ),
   true,
   'preloaded source photo enters state before direct results render',
 );

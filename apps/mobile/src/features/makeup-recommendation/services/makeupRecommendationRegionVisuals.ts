@@ -148,35 +148,25 @@ export function resolveMakeupRecommendationAreaCropAsset(input: {
     };
   }
 
-  const sourceCrop = mapAnalysisRegionVisualsToSourceCrops(
-    input.sourceRegionVisuals,
-  )?.[input.area];
-  if (input.generatedReady && sourceCrop?.boxes.length) {
-    return {
-      boxes: sourceCrop.boxes,
-      coordinateSpace: 'generated-image',
-      guides: [],
-      imageSource: input.generatedImage,
-      ready: true,
-    };
-  }
-
-  if (input.sourceImageUri?.trim() && sourceCrop?.boxes.length) {
-    return {
-      boxes: sourceCrop.boxes,
-      coordinateSpace: 'source-analysis-image',
-      guides: sourceCrop.guides,
-      imageSource: {uri: input.sourceImageUri.trim()},
-      ready: true,
-    };
-  }
-
   if (input.generatedReady) {
     return {
       boxes: [FULL_IMAGE_BOX],
       coordinateSpace: 'full-image',
       guides: [],
       imageSource: input.generatedImage,
+      ready: true,
+    };
+  }
+
+  const sourceCrop = mapAnalysisRegionVisualsToSourceCrops(
+    input.sourceRegionVisuals,
+  )?.[input.area];
+  if (input.sourceImageUri?.trim() && sourceCrop?.boxes.length) {
+    return {
+      boxes: sourceCrop.boxes,
+      coordinateSpace: 'source-analysis-image',
+      guides: sourceCrop.guides,
+      imageSource: {uri: input.sourceImageUri.trim()},
       ready: true,
     };
   }

@@ -91,6 +91,7 @@ import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
   filterMakeupRecommendationReportsByDiscovery,
   getInitialMakeupRecommendationScreenPhase,
+  getMakeupRecommendationResultPhase,
   isMakeupRecommendationReportAllowedByDiscovery,
   shouldHandleMakeupRecommendationBack,
   type MakeupRecommendationScreenPhase,
@@ -300,6 +301,25 @@ export const MakeupRecommendationScreen = forwardRef<
     const operation = {controller: new AbortController(), id: ++operationSequence.current};
     slot.current = operation;
     return operation;
+  }, []);
+
+  const presentSession = useCallback((
+    nextSession: MakeupRecommendationSession,
+    waitingPhase: 'loading' | 'reportLoading',
+  ) => {
+    setSession(nextSession);
+    if (nextSession.phase !== 'results') {
+      setPhase(nextSession.phase === 'ready' ? waitingPhase : nextSession.phase);
+      return;
+    }
+    if (nextSession.imageStatus === 'partial' || nextSession.imageStatus === 'failed') {
+      setErrorMessage(
+        nextSession.imageStatus === 'partial'
+          ? '추천 이미지 일부를 완성하지 못했어요. 다시 시도해 주세요.'
+          : '추천 이미지를 완성하지 못했어요. 다시 시도해 주세요.',
+      );
+    }
+    setPhase(getMakeupRecommendationResultPhase(nextSession.imageStatus, waitingPhase));
   }, []);
 
   useEffect(() => () => {
@@ -517,8 +537,7 @@ export const MakeupRecommendationScreen = forwardRef<
         if (destination === 'loading') {
           const generated = await resolveReadySession(restored, operation.controller.signal);
           if (!isCurrent()) return;
-          setSession(generated);
-          setPhase('results');
+          presentSession(generated, 'loading');
           return;
         }
 
@@ -529,8 +548,7 @@ export const MakeupRecommendationScreen = forwardRef<
         if (hydrated.results.length === 0) throw new Error('저장된 추천 결과를 복원하지 못했어요.');
         await clearCurrentMakeupRecommendationSessionId(AsyncStorage, storedSessionId);
         if (!isCurrent()) return;
-        setSession(hydrated);
-        setPhase('results');
+        presentSession(hydrated, 'loading');
       } catch (error) {
         if (isRequestAbortedError(error) || !isCurrent()) return;
         if (storedSessionId && shouldDiscardStoredMakeupRecommendationSessionForError(error)) {
@@ -544,7 +562,7 @@ export const MakeupRecommendationScreen = forwardRef<
       }
     })();
     return () => operation.controller.abort();
-  }, [beginOperation, initialView, reportId, resolveReadySession]);
+  }, [beginOperation, initialView, presentSession, reportId, resolveReadySession]);
 
   const runStart = useCallback((input: StartMakeupRecommendationV2Input) => {
     const operation = beginOperation(workflowRequest);
@@ -574,8 +592,7 @@ export const MakeupRecommendationScreen = forwardRef<
         if (workflowRequest.current?.id !== operation.id) return;
         const nextSession = await resolveReadySession(startedSession, operation.controller.signal);
         if (workflowRequest.current?.id !== operation.id) return;
-        setSession(nextSession);
-        setPhase(nextSession.phase === 'ready' ? 'loading' : nextSession.phase);
+        presentSession(nextSession, 'loading');
       } catch (error) {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
         const customSituationError = !input.customSituationLabel && input.customSituationText
@@ -594,7 +611,7 @@ export const MakeupRecommendationScreen = forwardRef<
         if (workflowRequest.current?.id === operation.id) setIsStarting(false);
       }
     })();
-  }, [beginOperation, requestAiDataConsent, resolveReadySession]);
+  }, [beginOperation, presentSession, requestAiDataConsent, resolveReadySession]);
 
   const startFromKeyword = useCallback((keyword: MakeupTrendKeyword) => {
     if (!selectedReport || !selectedSituation || isStarting) return;
@@ -707,8 +724,7 @@ export const MakeupRecommendationScreen = forwardRef<
           loadingStartedAt,
         );
         if (workflowRequest.current?.id !== operation.id) return;
-        setSession(nextSession);
-        setPhase(nextSession.phase === 'ready' ? 'loading' : nextSession.phase);
+        presentSession(nextSession, 'loading');
       } catch (error) {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
         setErrorMessage(getMakeupRecommendationWorkflowErrorMessage(
@@ -789,8 +805,7 @@ export const MakeupRecommendationScreen = forwardRef<
     imagePollFailureCount.current = 0;
     setImageRetryError('');
     setLoadingContext(null);
-    setSession(restored);
-    setPhase('results');
+    presentSession(restored, 'reportLoading');
 
     if (sourceReportWasPreloaded) return;
 
@@ -814,7 +829,7 @@ export const MakeupRecommendationScreen = forwardRef<
         hydratedReportDetailIds.current.delete(restored.sourceAnalysisReportId);
       }
     });
-  }, [discovery.reports, discovery.selectedReportId]);
+  }, [discovery.reports, discovery.selectedReportId, presentSession]);
 
   const openHistoryReport = useCallback((report: MakeupRecommendationReportHistoryItem) => {
     const operation = beginOperation(workflowRequest);
@@ -920,8 +935,7 @@ export const MakeupRecommendationScreen = forwardRef<
           modelVersion: 'makeup-recommendation-v2',
           status: 'completed',
         });
-        setSession(nextSession);
-        setPhase('results');
+        presentSession(nextSession, 'loading');
       })
       .catch(error => {
         if (isRequestAbortedError(error) || mutationRequest.current?.id !== operation.id) return;
@@ -945,11 +959,18 @@ export const MakeupRecommendationScreen = forwardRef<
     setImageRetryError('');
     void retryGeneratedMakeupRecommendationImages(session, operation.controller.signal, lookId)
       .then(nextSession => {
-        if (mutationRequest.current?.id === operation.id) setSession(nextSession);
+        if (mutationRequest.current?.id === operation.id) {
+          presentSession(nextSession, 'reportLoading');
+        }
       })
       .catch(error => {
         if (isRequestAbortedError(error) || mutationRequest.current?.id !== operation.id) return;
-        setImageRetryError(error instanceof Error ? error.message : '이미지를 다시 만들지 못했어요.');
+        const retryErrorMessage = error instanceof Error
+          ? error.message
+          : '이미지를 다시 만들지 못했어요.';
+        setImageRetryError(retryErrorMessage);
+        setErrorMessage(retryErrorMessage);
+        setPhase('error');
       });
   };
 
@@ -1023,7 +1044,12 @@ export const MakeupRecommendationScreen = forwardRef<
   }, [phase, session?.imageStatus, telemetryContextId, telemetryLooks]);
 
   useEffect(() => {
-    if (phase !== 'results' || !session?.reportId || !['pending', 'processing'].includes(session.imageStatus ?? '')) return;
+    if (
+      !['loading', 'reportLoading'].includes(phase)
+      || !session?.reportId
+      || !['pending', 'processing'].includes(session.imageStatus ?? '')
+    ) return;
+    const waitingPhase = phase === 'reportLoading' ? 'reportLoading' : 'loading';
     const controller = new AbortController();
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1033,14 +1059,16 @@ export const MakeupRecommendationScreen = forwardRef<
           if (!cancelled) {
             imagePollFailureCount.current = 0;
             setImageRetryError('');
-            setSession(nextSession);
+            presentSession(nextSession, waitingPhase);
           }
         })
         .catch(error => {
           if (cancelled || isRequestAbortedError(error)) return;
           imagePollFailureCount.current += 1;
           if (imagePollFailureCount.current >= IMAGE_POLL_MAX_FAILURES) {
-            setImageRetryError('이미지 상태를 확인하지 못했어요. 추천 내용은 그대로 볼 수 있어요.');
+            setErrorMessage('이미지 상태를 확인하지 못했어요. 다시 시도해 주세요.');
+            setPhase('error');
+            return;
           }
           retryTimer = setTimeout(poll, 5000);
         });
@@ -1052,7 +1080,7 @@ export const MakeupRecommendationScreen = forwardRef<
       clearTimeout(timer);
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [phase, session]);
+  }, [phase, presentSession, session]);
 
   useImperativeHandle(ref, () => ({
     handleBack() {
@@ -1106,6 +1134,18 @@ export const MakeupRecommendationScreen = forwardRef<
       setReportLoadAttempt(current => current + 1);
       return;
     }
+    if (
+      phase === 'error'
+      && session?.reportId
+      && ['pending', 'processing', 'partial', 'failed'].includes(session.imageStatus ?? '')
+    ) {
+      setErrorMessage('');
+      setPhase('reportLoading');
+      if (session.imageStatus === 'partial' || session.imageStatus === 'failed') {
+        handleRetryImages();
+      }
+      return;
+    }
     if (session?.phase === 'ready') {
       const operation = beginOperation(workflowRequest);
       setLoadingContext(buildLoadingContextFromSession(session));
@@ -1114,8 +1154,7 @@ export const MakeupRecommendationScreen = forwardRef<
       void resolveReadySession(session, operation.controller.signal)
         .then(nextSession => {
           if (workflowRequest.current?.id !== operation.id) return;
-          setSession(nextSession);
-          setPhase('results');
+          presentSession(nextSession, 'loading');
         })
         .catch(error => {
           if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;

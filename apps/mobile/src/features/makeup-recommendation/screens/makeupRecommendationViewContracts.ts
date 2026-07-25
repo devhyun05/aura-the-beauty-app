@@ -1,5 +1,8 @@
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import type {MakeupRecommendationDiscovery} from '../types';
+import type {
+  MakeupRecommendationDiscovery,
+  MakeupRecommendationImageStatus,
+} from '../types';
 
 type ReportVisibilityDiscovery = Pick<MakeupRecommendationDiscovery, 'source' | 'sourceReportIds'>;
 
@@ -59,6 +62,15 @@ export function getInitialMakeupRecommendationScreenPhase({
   reportId?: string;
 }): MakeupRecommendationScreenPhase {
   return reportId?.trim() ? 'reportLoading' : initialView;
+}
+
+export function getMakeupRecommendationResultPhase(
+  imageStatus: MakeupRecommendationImageStatus | undefined,
+  waitingPhase: 'loading' | 'reportLoading',
+): MakeupRecommendationScreenPhase {
+  if (imageStatus === 'pending' || imageStatus === 'processing') return waitingPhase;
+  if (imageStatus === 'partial' || imageStatus === 'failed') return 'error';
+  return 'results';
 }
 
 export function shouldHandleMakeupRecommendationBack(

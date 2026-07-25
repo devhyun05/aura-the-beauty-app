@@ -79,8 +79,8 @@ const generatedWithSourceCropFallback = resolveMakeupRecommendationAreaCropAsset
 });
 expectEqual(
   generatedWithSourceCropFallback.coordinateSpace,
-  'generated-image',
-  'source region coordinates crop the completed AFTER image',
+  'full-image',
+  'source coordinates are never applied to the completed AFTER image',
 );
 expectEqual(
   (generatedWithSourceCropFallback.imageSource as {uri?: string}).uri,
@@ -88,9 +88,14 @@ expectEqual(
   'area guide never falls back to the unmade-up source once AFTER is ready',
 );
 expectEqual(
-  generatedWithSourceCropFallback.guides.length,
+  generatedWithSourceCropFallback.boxes[0]?.left,
   0,
-  'source-only guide overlays are not drawn on the generated image',
+  'safe generated fallback starts at the full-image left edge',
+);
+expectEqual(
+  generatedWithSourceCropFallback.boxes[0]?.bottom,
+  1,
+  'safe generated fallback reaches the full-image bottom edge',
 );
 
 const generatedFullFallback = resolveMakeupRecommendationAreaCropAsset({

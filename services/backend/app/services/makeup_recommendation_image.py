@@ -43,6 +43,13 @@ OUTPUT_FORMATS = {
 PROVIDER_OUTPUT_FORMATS = {"JPEG": "jpeg", "PNG": "png", "WEBP": "webp"}
 MAX_PROVIDER_OUTPUT_PIXELS = 16_777_216
 logger = logging.getLogger(__name__)
+REQUIRED_CROP_AREA_COUNTS = {
+  "base": 1,
+  "brow": 2,
+  "eye": 2,
+  "cheek": 2,
+  "lip": 1,
+}
 
 
 @dataclass(frozen=True)
@@ -483,6 +490,44 @@ def _put_recommendation_image(
     ) from exc
 
 
+def _has_required_makeup_crops(crop_metadata: Any) -> bool:
+  if not isinstance(crop_metadata, dict):
+    return False
+  areas = crop_metadata.get("areas")
+  if not isinstance(areas, dict):
+    return False
+  for area, required_count in REQUIRED_CROP_AREA_COUNTS.items():
+    regions = areas.get(area)
+    if not isinstance(regions, list) or len(regions) < required_count:
+      return False
+    if any(not isinstance(region, dict) or not isinstance(region.get("box"), dict) for region in regions):
+      return False
+  return True
+
+
+def _extract_personalized_face_metadata(
+  source_image_bytes: bytes,
+  generated_image_bytes: bytes,
+) -> dict[str, dict[str, Any]]:
+  metadata = extract_personalized_makeup_face_metadata(
+    source_image_bytes,
+    generated_image_bytes,
+  )
+  if not isinstance(metadata, dict):
+    metadata = {}
+  if not _has_required_makeup_crops(metadata.get("cropMetadata")):
+    retry_crop_metadata = extract_makeup_face_crop_metadata(generated_image_bytes)
+    if isinstance(retry_crop_metadata, dict):
+      metadata["cropMetadata"] = retry_crop_metadata
+  if not _has_required_makeup_crops(metadata.get("cropMetadata")):
+    raise AppError(
+      502,
+      "MAKEUP_IMAGE_CROP_METADATA_MISSING",
+      "생성 이미지의 얼굴 부위를 확인하지 못했어요. 다시 시도해 주세요.",
+    )
+  return metadata
+
+
 def _generate_asset_sync(
   settings: Settings,
   report_id: UUID,
@@ -547,7 +592,7 @@ def _generate_asset_sync(
   face_metadata: dict[str, dict[str, Any]] = {}
   try:
     if personalized_source is not None:
-      face_metadata = extract_personalized_makeup_face_metadata(
+      face_metadata = _extract_personalized_face_metadata(
         personalized_source.content,
         image_bytes,
       )
@@ -564,7 +609,16 @@ def _generate_asset_sync(
       )
       if semantic_color_metadata is not None:
         face_metadata["semanticColorMetadata"] = semantic_color_metadata
-  except Exception:  # noqa: BLE001 - optional face metadata must never fail image delivery.
+  except AppError as exc:
+    if exc.code == "MAKEUP_IMAGE_CROP_METADATA_MISSING":
+      raise
+    logger.warning(
+      "[aura:makeup-recommendation] face-metadata:skipped reportId=%s imageKey=%s",
+      report_id,
+      image_key,
+      exc_info=True,
+    )
+  except Exception:  # noqa: BLE001 - generic face metadata remains best-effort.
     logger.warning(
       "[aura:makeup-recommendation] face-metadata:skipped reportId=%s imageKey=%s",
       report_id,
