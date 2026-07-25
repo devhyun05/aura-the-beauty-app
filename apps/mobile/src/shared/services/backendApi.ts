@@ -233,7 +233,12 @@ async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> |
 }
 
 function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
+  if (!(error instanceof Error)) return false;
+
+  return error.name === 'AbortError'
+    || /FetchRequestCanceledException|fetch request has been cancel(?:ed|led)/i.test(
+      error.message,
+    );
 }
 
 function isNetworkFailure(error: unknown): boolean {
