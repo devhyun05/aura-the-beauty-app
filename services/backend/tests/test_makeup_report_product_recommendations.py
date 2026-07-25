@@ -184,7 +184,7 @@ async def test_picker_uses_one_bulk_asset_query_and_keeps_partial_recipe(
 
 
 @pytest.mark.asyncio
-async def test_picker_excludes_failed_images_but_keeps_pending_and_partial() -> None:
+async def test_picker_keeps_failed_pending_and_partial_images_when_recipe_is_valid() -> None:
   failed = _report_row(image_status="failed")
   failed["scenario_text"] = "failed"
   pending = _report_row(image_status="pending")
@@ -200,8 +200,6 @@ async def test_picker_excludes_failed_images_but_keeps_pending_and_partial() -> 
       normalized = " ".join(query.split())
       if "from makeup_recommendation_reports" in query:
         self.report_query = normalized
-        # Deliberately return a failed row to verify the service boundary too;
-        # a real PostgreSQL query applies the predicate below.
         return [failed, pending, partial]
       return []
 
@@ -209,9 +207,9 @@ async def test_picker_excludes_failed_images_but_keeps_pending_and_partial() -> 
   result = await service.list_owned_makeup_reports(
     db, Settings(), user_id=USER_ID, limit=20, offset=0,
   )
-  assert "image_status is distinct from 'failed'" in db.report_query
-  assert [report["scenarioText"] for report in result["reports"]] == ["pending", "partial"]
-  assert [report["imageStatus"] for report in result["reports"]] == ["pending", "partial"]
+  assert "image_status is distinct from 'failed'" not in db.report_query
+  assert [report["scenarioText"] for report in result["reports"]] == ["failed", "pending", "partial"]
+  assert [report["imageStatus"] for report in result["reports"]] == ["failed", "pending", "partial"]
 
 
 @pytest.mark.asyncio

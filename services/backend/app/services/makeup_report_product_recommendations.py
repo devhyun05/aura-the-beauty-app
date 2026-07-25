@@ -439,7 +439,6 @@ async def list_owned_makeup_reports(
     select id, scenario_text, recommendation, image_status, created_at
     from makeup_recommendation_reports
     where user_id=$1 and schema_version='makeup-recommendation-v2'
-      and image_status is distinct from 'failed'
     order by created_at desc
     limit $2 offset $3
     """,
@@ -466,14 +465,9 @@ async def list_owned_makeup_reports(
   s3 = S3Service(settings)
   items: list[dict[str, Any]] = []
   for report in reports:
-    # Keep the same fail-closed boundary for test doubles or replicas that do
-    # not apply the primary SQL predicate. Pending/processing/partial reports
-    # remain selectable because their structured recipe is already complete.
-    if str(report.get("image_status") or "") == "failed":
-      continue
     recommendation = normalize_makeup_report_recommendation(report.get("recommendation"))
-    # Image generation may still be pending/partial; the structured recipe is
-    # independently valid and remains eligible for product matching.
+    # 이미지 생성 상태와 무관하게 구조화 레시피가 유효하면 제품 매칭에 사용할 수
+    # 있다. 이미지 실패가 추천 보고서 자체와 제품 추천까지 무효화하지 않는다.
     projected = _report_projection(
       dict(report),
       recommendation,

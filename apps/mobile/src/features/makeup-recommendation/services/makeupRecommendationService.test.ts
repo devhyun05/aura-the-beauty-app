@@ -607,9 +607,6 @@ const previewOnlyAnchorHistory = mapBackendRecommendationReports([{
       durationMinutes: 20,
       difficulty: 'medium',
       steps: COMPLETE_BACKEND_STEPS,
-      ...(role === 'anchor'
-        ? {}
-        : {imageUrl: `https://signed.example.com/report-preview-only-${role}.jpg`}),
     })),
   },
   imageStatus: 'completed',
@@ -627,6 +624,16 @@ expectEqual(
   JSON.stringify(previewOnlyAnchorHistory[0].results[0].imageSource),
   JSON.stringify({uri: 'https://signed.example.com/report-preview-only-anchor.jpg'}),
   'preview-only anchor is applied before completed-look validation',
+);
+expectEqual(
+  previewOnlyAnchorHistory[0].results[1].imageStatus,
+  'pending',
+  'aggregate anchor completion does not mark an image-less bold recipe completed',
+);
+expectEqual(
+  previewOnlyAnchorHistory[0].results[2].imageStatus,
+  'pending',
+  'aggregate anchor completion does not mark an image-less discovery recipe completed',
 );
 expectEqual(
   getMakeupRecommendationPreviewStatusLabel('processing'),

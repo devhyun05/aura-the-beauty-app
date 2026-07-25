@@ -135,6 +135,9 @@ export type {
 
 export interface FaceAnalysisReport {
   id: string;
+  // 추천 생성은 백엔드가 completed로 확정한 보고서만 사용할 수 있다. 이 필드가
+  // 추가되기 전 로컬 fixture/레거시 보고서는 undefined일 수 있다.
+  status?: string;
   title: string;
   reportTitle: string;
   createdAt?: string;

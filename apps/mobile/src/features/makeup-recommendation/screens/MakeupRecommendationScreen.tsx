@@ -350,12 +350,25 @@ export const MakeupRecommendationScreen = forwardRef<
     const reports = filterMakeupRecommendationReportsByDiscovery(reportsResult.value, catalog);
     const routeReportIsAllowed = !analysisReportId
       || isMakeupRecommendationReportAllowedByDiscovery(analysisReportId, catalog);
-    if (analysisReportId && routeReportIsAllowed && !reports.some(item => item.id === analysisReportId)) {
+    if (analysisReportId && !routeReportIsAllowed) {
+      dispatchDiscovery({
+        type: 'reports/failed',
+        message: '얼굴 분석 보고서가 아직 완성 중이에요. 잠시 후 다시 시도해 주세요.',
+      });
+      return;
+    }
+    if (analysisReportId && !reports.some(item => item.id === analysisReportId)) {
       try {
         const requested = await getFaceAnalysisReportById(analysisReportId);
         if (requested) reports.unshift(requested);
       } catch {
-        // Ownership/not-found stays hidden; latest owned completed report remains the safe default.
+        // 요청한 보고서가 아직 처리 중이거나 소유하지 않은 경우 다른 과거 보고서로
+        // 조용히 대체하지 않는다. 사용자가 재시도하면 완료된 동일 보고서를 다시 읽는다.
+        dispatchDiscovery({
+          type: 'reports/failed',
+          message: '선택한 얼굴 분석 보고서를 아직 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
+        });
+        return;
       }
     }
     cacheMakeupDiscoveryReports(reports);

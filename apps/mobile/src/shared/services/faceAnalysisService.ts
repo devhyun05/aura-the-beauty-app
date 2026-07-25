@@ -1121,6 +1121,7 @@ function mapBackendJobToFaceAnalysisReport(
 
   return {
     id: reportId,
+    ...(job.status?.trim() ? {status: job.status.trim()} : {}),
     createdAt: job.createdAt?.trim() || undefined,
     analyzedAt: options.allowProcessing
       ? firstText(job.analyzedAt, job.createdAt) ?? new Date().toISOString()

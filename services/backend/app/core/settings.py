@@ -347,10 +347,9 @@ class Settings(BaseSettings):
   product_event_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
   product_outbound_rate_limit_per_minute: int = Field(default=30, ge=1, le=10000)
 
-  # 비용이 나가는 생성 요청(리포트/추출/피드백/추천)에 대한 사용자별 분당·일일 한도.
-  # report_rate_limit.enforce_report_generation_limit 가 api/analysis·feedback·
-  # filter_extractions 에서 소비한다. 원 커밋(f75fb0875)에서 정의됐으나 이후 병합에서
-  # settings.py 변경만 유실돼(사용처는 남음) 모든 생성 요청이 500 나던 것을 복원한다.
+  # Legacy compatibility values. Report generation is intentionally unlimited;
+  # report_rate_limit.enforce_report_generation_limit ignores these values and
+  # does not read or mutate report_request_rate_limits.
   face_analysis_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
   face_analysis_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
   filter_extraction_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)

@@ -1409,9 +1409,18 @@ export function mapBackendRecommendationLooks({
           imageStatus: anchorPreviewImageStatus ?? look.imageStatus,
         }
       : look;
-    const resolvedImageStatus = validatedLook.imageStatus ?? imageStatus;
+    // V2 currently generates and persists only the anchor preview. The report-level
+    // status therefore describes that anchor asset, not every recipe alternative.
+    // Applying aggregate "completed" to bold/discovery would make their intentional
+    // lack of imageUrl invalidate the entire otherwise-complete report.
+    const resolvedImageStatus =
+      validatedLook.imageStatus
+      ?? (role === 'anchor' ? imageStatus : 'pending');
     const complete = requireCompleteBackendLook(validatedLook, resolvedImageStatus);
-    const resolvedImageError = validatedLook.imageError?.trim() || imageError?.trim() || undefined;
+    const resolvedImageError =
+      validatedLook.imageError?.trim()
+      || (role === 'anchor' ? imageError?.trim() : undefined)
+      || undefined;
     const {appliedConditions, difficulty, durationMinutes, imageUrl, reasons, steps, summary, title} = complete;
     const products = mapBackendLookProducts(look.products);
     const areaGuides = mapBackendAreaGuides(look.areaGuides);

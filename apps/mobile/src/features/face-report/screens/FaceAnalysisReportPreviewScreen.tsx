@@ -250,9 +250,12 @@ export function FaceAnalysisReportPreviewScreen({
   }, [reloadBodyProfile]);
 
   const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
+  // 점진 보고서는 본문을 먼저 보여줄 수 있지만 추천 API는 completed 보고서만
+  // 허용한다. status 도입 전 저장된 레거시 보고서는 기존 동작을 유지한다.
   const recommendationReportId =
-    report?.id ??
-    (!minimumPreview?.errorMessage ? minimumPreview?.reportId : undefined);
+    report && (!report.status || report.status === 'completed')
+      ? report.id
+      : undefined;
 
   // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
   // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
@@ -268,7 +271,7 @@ export function FaceAnalysisReportPreviewScreen({
       },
     ];
 
-    if (onPressProducts) {
+    if (onPressProducts && recommendationReportId) {
       options.push({text: '추천 제품', onPress: () => onPressProducts(report.id)});
     }
     options.push({text: '취소', style: 'cancel'});
@@ -276,6 +279,7 @@ export function FaceAnalysisReportPreviewScreen({
     Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
   }, [
     onPressProducts,
+    recommendationReportId,
     report,
   ]);
 
