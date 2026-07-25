@@ -311,6 +311,7 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
   aspect = _number(profile.get(keys[0]))
   jaw = _number(profile.get(keys[1]))
   lower = _number(profile.get(keys[2]))
+  width = fmean(value for value in (jaw, lower) if value is not None) if jaw is not None or lower is not None else None
   # 판정 단일 정본(2026-07-17): 측정 시점 모바일 verdict가 있으면 세로
   # 분류는 그것을 따른다(모바일 1.351/1.506 + pose 유보 vs 서버 1.38/1.2
   # 독립 임계의 불일치 제거). 없으면(구 payload) 레거시 임계 폴백.
@@ -319,9 +320,8 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
     # 측정 시점 판정 보류(pose 결측 등) — 레거시 임계로 단정을 복원하지
     # 않고 서버도 함께 보류한다(2차 리뷰 B-1).
     return _insight(profile, keys, None, "")
-  if aspect is None and verdict is None:
+  if aspect is None and verdict is None and width is None:
     return _insight(profile, keys, None, "")
-  width = fmean(value for value in (jaw, lower) if value is not None) if jaw is not None or lower is not None else None
   if verdict in {"borderline_wide", "borderline_long"} and width is None:
     # 세로 축은 경계 유보인데 폭 근거마저 없으면 "폭 중심 판단" 자체가
     # 불가 — 근거 없는 '타원형' 단정 대신 보류한다(GO 게이트 MEDIUM).
@@ -343,11 +343,12 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
   # borderline verdict는 세로 축 유보 — 라벨은 폭 중심으로 내리되 설명에
   # 유보를 명시해 프롬프트 지시("경계라 단정 금지")와 표현 강도를 일치시킨다.
   is_borderline = verdict in {"borderline_wide", "borderline_long"}
-  description = (
-    "세로 비율은 경계 구간이라 단정하지 않고, 하관 폭 중심으로 판단했어요."
-    if is_borderline
-    else "얼굴 세로 비율과 하관 폭을 함께 반영한 결과예요."
-  )
+  if aspect is None and verdict is None:
+    description = "헤어라인이 가려져 전체 세로 길이는 제외하고, 하관 폭과 윤곽을 중심으로 판단했어요."
+  elif is_borderline:
+    description = "세로 비율은 경계 구간이라 단정하지 않고, 하관 폭 중심으로 판단했어요."
+  else:
+    description = "얼굴 세로 비율과 하관 폭을 함께 반영한 결과예요."
   return _insight(profile, keys, label, description)
 
 
@@ -369,6 +370,18 @@ def _derive_vertical_balance(profile: dict[str, MetricEnvelope]) -> Insight:
     "lower": "하안부 우세",
   }
   if dominant in dominant_labels:
+    middle_lower_only = _number(profile.get(keys[0])) is None
+    if middle_lower_only:
+      middle_lower_labels = {
+        "balanced": "중·하안부 비율 균형형",
+        "middle": "중안부 강조",
+        "lower": "하안부 강조",
+      }
+      if dominant in middle_lower_labels:
+        return _insight(
+          profile, keys, middle_lower_labels[dominant],
+          "헤어라인을 제외하고 측정된 중안부와 하안부 길이를 직접 비교했어요.",
+        )
     return _insight(
       profile, keys, dominant_labels[dominant],
       "측정 시점 판정(부위 간 자기내부 비교)을 따랐어요.",

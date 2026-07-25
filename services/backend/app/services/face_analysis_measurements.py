@@ -378,14 +378,16 @@ def _normalize_vertical(
   # (임계 0.025/1.38)가 같은 얼굴을 다르게 판정하던 불일치 제거.
   interpretation = _record(raw.get("interpretation"))
   dominant = interpretation.get("dominantPart")
-  # 'unknown'(2구간 측정)은 의도적 미발행 — H 의존 normalized 값도 함께
-  # blocked라 서버 규칙은 근거 부족으로 보류된다. full 모드에서 unknown이
-  # 생기는 순간 이 가정이 깨지므로, 그때는 unknown도 발행해 규칙에서
-  # 명시적으로 보류 처리해야 한다(faceLengthVerdict의 indeterminate와 대칭).
   if isinstance(dominant, str) and dominant in {"balanced", "upper", "middle", "lower"}:
+    # 헤어라인이 없어도 중안부↔하안부의 직접 비교는 유효하다. 이 경우
+    # upper만 금지하고 balanced/middle/lower 판정은 제품 근거로 발행한다.
+    dominant_usable = full_vertical_usable or (
+      base_usable
+      and dominant in {"balanced", "middle", "lower"}
+    )
     output["verticalThirds.dominantPart"] = _camera_metric(
       value=dominant, confidence=confidence, source=MeasurementSource.LANDMARK,
-      shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,
+      shot=MeasurementShot.S1, unit="label", usable=dominant_usable, reason=reason,
       warnings=warnings,
     )
   judgment = _record(raw.get("faceLengthJudgment"))

@@ -102,13 +102,13 @@ const partialCore = resolveReportCompletionStatus(
 );
 expectEqual(
   partialCore.stages[0]?.state,
-  'partial',
-  'missing vertical-ratio anchor keeps core analysis partial',
+  'complete',
+  'middle/lower-only proportion analysis completes the core stage',
 );
 expectEqual(
   partialCore.complete,
-  false,
-  'partial vertical-ratio measurement is not labelled fully complete',
+  true,
+  'missing hairline alone does not make the report incomplete',
 );
 
 const missingCore = resolveReportCompletionStatus(

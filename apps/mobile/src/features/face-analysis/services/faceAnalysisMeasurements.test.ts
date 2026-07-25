@@ -728,8 +728,8 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(restoredProxy.verticalThirds?.displayRatio.upper, null, 'proxy upper removed');
   expectEqual(
     restoredProxy.interpretation.dominantPart,
-    'unknown',
-    'proxy dominant part removed',
+    'balanced',
+    'proxy middle/lower ratio remains usable without a hairline',
   );
 }
 

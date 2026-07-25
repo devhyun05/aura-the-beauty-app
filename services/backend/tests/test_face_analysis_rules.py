@@ -187,11 +187,24 @@ def test_chain_indeterminate_full_session_withholds_face_shape() -> None:
   assert result.face_shape.label == "측정 보류"
 
 
-def test_chain_missing_hairline_stays_withheld() -> None:
-  profile = normalize_camera_measurements(_thirds_payload(verdict="long", eligible=False))
+def test_chain_missing_hairline_uses_middle_lower_and_jaw_width() -> None:
+  payload = _thirds_payload(verdict="long", eligible=False)
+  payload["faceVerticalThirds"]["interpretation"] = {
+    "dominantPart": "lower",
+    "summary": "하안부가 중안부보다 긴 편으로 측정됐어요.",
+    "title": "얼굴 세로 비율 분석",
+  }
+  payload["faceGeometry2d"] = {
+    "status": "full_success",
+    "metrics": {
+      "jawWidthRatio": {"value": 0.72, "unit": "ratio", "warnings": []},
+      "lowerJawWidthRatio": {"value": 0.78, "unit": "ratio", "warnings": []},
+    },
+  }
+  profile = normalize_camera_measurements(payload)
   result = derive_face_analysis(profile)
-  # H 부재: verdict envelope는 unusable(value=None) → 규칙은 근거 부족 보류.
-  assert result.face_shape.label == "측정 보류"
+  assert result.face_shape.label == "타원형"
+  assert result.vertical_balance.label == "하안부 강조"
 
 
 def test_chain_unusable_quality_stays_withheld() -> None:

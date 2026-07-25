@@ -80,12 +80,12 @@ export function runFaceVerticalThirdsMathTests() {
     'Opposite-direction deltas inside the threshold (1.07:1:0.93) must stay balanced.',
   );
   expect(
-    deriveDominantPart(buildRatio(null, 1.0)) === 'unknown',
-    'Without hairline a two-segment result must not claim a three-part dominant region.',
+    deriveDominantPart(buildRatio(null, 1.0)) === 'balanced',
+    'Without hairline equal middle/lower segments must map to balanced.',
   );
   expect(
-    deriveDominantPart(buildRatio(null, 0.82)) === 'unknown',
-    'Without hairline a two-segment result must not claim three-part balance.',
+    deriveDominantPart(buildRatio(null, 0.82)) === 'middle',
+    'Without hairline a shorter lower segment must map to relatively long middle.',
   );
 
   const balanced = buildInterpretation('full_success', buildRatio(1.0, 1.0));

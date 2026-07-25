@@ -41,6 +41,7 @@ import {
   APPLE_HAIRLINE_MIN_CONFIDENCE,
 } from '../../face-ratio/constants';
 import {isActualHairlineProvider} from '../../face-ratio/services/faceVerticalThirdsHairlineSelection';
+import {buildInterpretation} from '../../face-ratio/services/faceVerticalThirdsMath';
 import type {
   AuraAxis,
   AuraPersonalColorResult,
@@ -963,6 +964,7 @@ function decodeVerticalThirds(
     resolvedMeasurementMode === 'middle_lower_only'
       ? 'partial_success'
       : status;
+  const measuredInterpretation = buildInterpretation(decodedStatus, verticalThirds);
 
   return {
     artifacts: {},
@@ -982,11 +984,11 @@ function decodeVerticalThirds(
           ? (readString(interpretationRecord.dominantPart) as
               | FaceVerticalThirdsResult['interpretation']['dominantPart']
               | undefined)
-          : 'unknown',
+          : measuredInterpretation.dominantPart,
       summary:
         resolvedMeasurementMode === 'full_vertical_thirds'
           ? (readString(interpretationRecord.summary) ?? '')
-          : '헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.',
+          : measuredInterpretation.summary,
       title: readString(interpretationRecord.title) ?? '',
     },
     // 판정 스냅샷(Phase 0-5) — 구 저장분에는 없으므로 optional 복원.

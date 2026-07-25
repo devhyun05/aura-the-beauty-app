@@ -132,10 +132,14 @@ export function deriveDominantPart(
     return 'unknown';
   }
 
-  // H가 없는 결과는 중안부:하안부 2구간 측정이다. lower 하나만으로
-  // 상·중·하안부의 균형/우세를 판정하면 3분할 결과처럼 오해되므로 금지한다.
+  // H가 없는 결과는 중안부:하안부 2구간 측정이다. 상안부를 추론하지 않고
+  // 두 실측 구간 사이의 상대 길이만 판정한다.
   if (ratio.displayRatio.upper === null) {
-    return 'unknown';
+    const lowerDelta = ratio.displayRatio.lower - ratio.displayRatio.middle;
+    if (!isSignificantDelta(lowerDelta)) {
+      return 'balanced';
+    }
+    return lowerDelta > 0 ? 'lower' : 'middle';
   }
 
   // 중안부(1.0)를 기준으로 상/하안부와 직접 비교한다(자기내부 서술).
