@@ -26,6 +26,7 @@ GOLDEN_MASK_UNATTACHED_DELETION_REASON = "golden_mask_unattached_deleted"
 DELETABLE_REPORT_OBJECT_PREFIXES = (
   "uploads/capture/",
   "uploads/face-analysis/",
+  "uploads/face-analysis-source/",
   "uploads/generated-makeup/",
   "uploads/golden-mask/",
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
