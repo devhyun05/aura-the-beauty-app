@@ -211,13 +211,66 @@ def project_analysis_detail_payload_for_response(detail_payload: dict) -> dict:
   return projected
 
 
+def restore_app_store_face_report_contract(
+  detail_payload: dict,
+  source_object_key: object,
+) -> dict:
+  if not (
+    isinstance(source_object_key, str)
+    and source_object_key.startswith("uploads/face-analysis-source/")
+  ):
+    return detail_payload
+
+  result = detail_payload.get("result")
+  if not isinstance(result, dict) or "recommendedMakeups" in result:
+    return detail_payload
+
+  styling_looks = result.get("stylingLooks")
+  natural_look = (
+    styling_looks.get("natural")
+    if isinstance(styling_looks, dict)
+    else None
+  )
+  if not isinstance(natural_look, dict):
+    return detail_payload
+
+  required_fields = ("title", "subtitle", "description")
+  if not all(
+    isinstance(natural_look.get(field), str)
+    and natural_look[field].strip()
+    for field in required_fields
+  ):
+    return detail_payload
+
+  projected = copy.deepcopy(detail_payload)
+  projected_result = projected["result"]
+  tags = projected_result.get("tags")
+  projected_result["recommendedMakeups"] = [
+    {
+      field: natural_look[field].strip()
+      for field in required_fields
+    }
+    | {
+      "tags": [
+        tag.strip()
+        for tag in tags
+        if isinstance(tag, str) and tag.strip()
+      ] if isinstance(tags, list) else [],
+    },
+  ]
+  return projected
+
+
 def normalize_analysis_report_row(row: dict | None) -> dict | None:
   if row is None:
     return None
 
   normalized = dict(row)
-  normalized["detail_payload"] = project_analysis_detail_payload_for_response(
-    decode_json_object(normalized.get("detail_payload")),
+  normalized["detail_payload"] = restore_app_store_face_report_contract(
+    project_analysis_detail_payload_for_response(
+      decode_json_object(normalized.get("detail_payload")),
+    ),
+    normalized.get("source_media_ref_object_key"),
   )
   attach_analysis_media_reference(normalized, "source_media_ref", "source_media")
   attach_analysis_media_reference(normalized, "preview_media_ref", "preview_media")
