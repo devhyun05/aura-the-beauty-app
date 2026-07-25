@@ -55,6 +55,12 @@ def test_collect_report_media_refs_limits_to_report_owned_objects() -> None:
   assert refs_by_key["uploads/capture/source-face.jpg"].media_asset_id == source_media_id
   assert refs_by_key["uploads/golden-mask/mask.auragm"].media_asset_id == golden_mask_media_id
 
+def test_legacy_face_analysis_source_is_report_owned_object() -> None:
+  assert media_deletion_service.is_report_owned_object_key(
+    "uploads/face-analysis-source/source-face.jpg",
+  ) is True
+
+
 def test_makeup_recommendation_objects_are_managed_s3_targets() -> None:
   settings = Settings(
     s3_bucket_name="aura-media",
