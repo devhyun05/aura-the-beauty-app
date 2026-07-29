@@ -80,9 +80,9 @@ namespace ARMakeup.Face
             try { _landmarker?.Close(); }
             catch (Exception e) { Debug.LogWarning($"[FaceLandmarkSource] Close 실패: {e.Message}"); }
             _landmarker = null;
-            for (var s = 0; s < _ring.Length; s++)
+            for (var s = 0; s < _frameSlots.Length; s++)
             {
-                if (_ring[s].buffer.IsCreated) _ring[s].buffer.Dispose();
+                if (_frameSlots[s].buffer.IsCreated) _frameSlots[s].buffer.Dispose();
             }
             if (_detectBuffer.IsCreated) _detectBuffer.Dispose();
             if (_externalBuffer.IsCreated) _externalBuffer.Dispose();
@@ -178,9 +178,9 @@ namespace ARMakeup.Face
         // 지연 목표가 출렁여도 재생 시계가 역행하지 않도록 슬루 제한 (1ms당 0.5ms).
         const float DelaySlewRate = 0.5f;
 
-        // 60fps × 최대 지연(150ms) ≈ 9프레임 + 여유. 슬롯이 고갈되면 캡처를
+        // 60fps × 최대 지연(150ms) ≈ 9프레임 + 여유. 큐가 가득 차면 표시용 캡처를
         // 건너뛰어 추론 케이던스 표시로 우아하게 저하된다.
-        const int RingSize = 14;
+        const int FrameHistoryCapacity = 14;
 
         // 보간 브래킷 탐색용 결과 히스토리. 지연이 여러 추론 간격에 달할 수 있어
         // 2칸 페어로는 승격 순간 아직 필요한 과거 브래킷을 버리게 된다 (리뷰 확인).
@@ -201,16 +201,17 @@ namespace ARMakeup.Face
         double _inFlightSinceMs;
         int _consecutiveDetectFailures;
 
-        // 표시 프레임 링버퍼: 캡처 시각 순으로 쌓이고, 재생 시계가 지나가며 반납한다.
+        // 표시 프레임 슬롯은 한 번 할당해 재사용하고, 점유 순서는 고정 용량 원형 큐가
+        // 관리한다. head는 다음 표시 프레임이 선택될 때까지 유지되어 CPU 샘플도 안전하다.
         struct FrameSlot
         {
             public NativeArray<byte> buffer;
-            public double timestampMs;
             public int width, height;
-            public bool inUse;
         }
 
-        readonly FrameSlot[] _ring = new FrameSlot[RingSize];
+        readonly FrameSlot[] _frameSlots = new FrameSlot[FrameHistoryCapacity];
+        readonly TimestampedCircularQueue _frameQueue =
+            new TimestampedCircularQueue(FrameHistoryCapacity);
         NativeArray<byte> _detectBuffer; // 단일 in-flight이므로 하나를 재사용
 
         // ── 카메라 전환 감지 (전면↔후면) ──
@@ -221,9 +222,9 @@ namespace ARMakeup.Face
         bool _lastUserFacing;
         double _facingSwitchMs; // 전환 시각 — 그 전에 캡처된(이전 카메라) 결과 폐기 기준
 
-        // 표시 중인 프레임(엣지 스냅용 CPU 샘플). 링 슬롯을 참조만 하며, 반납돼도
-        // 데이터는 다음 Update 캡처 전까지 유효 — LateUpdate 소비자가 이 프레임에서
-        // 경계 픽셀을 읽는다(립 색상·속눈썹 라인·홍채 반경 스냅).
+        // 표시 중인 프레임(엣지 스냅용 CPU 샘플). 원형 큐의 head 슬롯을 참조하며,
+        // 더 최신 표시 프레임이 선택될 때까지 그 슬롯을 큐에서 유지한다. LateUpdate
+        // 소비자는 이 프레임에서 경계 픽셀을 읽는다(립 색상·속눈썹 라인·홍채 반경 스냅).
         NativeArray<byte> _presentedBuffer;
         int _presentedW, _presentedH;
         bool _hasPresentedFrame;
@@ -500,7 +501,7 @@ namespace ARMakeup.Face
         }
 
         /// <summary>
-        /// 브로커가 소유한 카메라 이미지를 표시 링버퍼에 복사하고, 추론이 놀고 있으면
+        /// 브로커가 소유한 카메라 이미지를 표시 원형 큐의 tail 슬롯에 복사하고, 추론이 놀고 있으면
         /// 같은 borrowed 이미지를 저해상도로 변환해 검출에 보낸다.
         /// </summary>
         void CaptureAndDetect(FaceCameraFrame frame)
@@ -508,15 +509,8 @@ namespace ARMakeup.Face
             XRCpuImage cpuImage = frame.Image;
             double nowMs = frame.ObservedAtMs;
 
-            // ---- 표시용 캡처 (링버퍼) ----
-            var slot = -1;
-            for (var s = 0; s < _ring.Length; s++)
-            {
-                if (_ring[s].inUse) continue;
-                slot = s;
-                break;
-            }
-            if (slot >= 0)
+            // ---- 표시용 캡처 (고정 용량 원형 큐) ----
+            if (_frameQueue.TryGetEnqueueSlot(out var slot))
             {
                 var conv = new XRCpuImage.ConversionParams(
                     cpuImage, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
@@ -526,20 +520,19 @@ namespace ARMakeup.Face
                     cpuImage.width / down, cpuImage.height / down);
 
                 var size = cpuImage.GetConvertedDataSize(conv);
-                if (!_ring[slot].buffer.IsCreated || _ring[slot].buffer.Length < size)
+                if (!_frameSlots[slot].buffer.IsCreated || _frameSlots[slot].buffer.Length < size)
                 {
-                    if (_ring[slot].buffer.IsCreated) _ring[slot].buffer.Dispose();
-                    _ring[slot].buffer = new NativeArray<byte>(size, Allocator.Persistent);
+                    if (_frameSlots[slot].buffer.IsCreated) _frameSlots[slot].buffer.Dispose();
+                    _frameSlots[slot].buffer = new NativeArray<byte>(size, Allocator.Persistent);
                 }
-                cpuImage.Convert(conv, _ring[slot].buffer);
+                cpuImage.Convert(conv, _frameSlots[slot].buffer);
 
-                _ring[slot].width = conv.outputDimensions.x;
-                _ring[slot].height = conv.outputDimensions.y;
-                _ring[slot].timestampMs = nowMs;
-                _ring[slot].inUse = true;
+                _frameSlots[slot].width = conv.outputDimensions.x;
+                _frameSlots[slot].height = conv.outputDimensions.y;
+                _frameQueue.CommitEnqueue(slot, nowMs);
                 _statCaptures++;
             }
-            // 슬롯 고갈 시 이 프레임 표시는 건너뛴다 (검출은 계속)
+            // 큐가 가득 차면 이 프레임 표시는 건너뛴다 (검출은 계속)
 
             // ---- 검출용 변환 + 제출 ----
             if (_ready && !_inFlight)
@@ -630,33 +623,23 @@ namespace ARMakeup.Face
             if (!inferenceDead && newestTs >= 0 && presentTs > newestTs + PredictMaxMs)
                 presentTs = newestTs + PredictMaxMs;
 
-            // 재생 시각 이전의 가장 최신 프레임
-            var best = -1;
-            for (var s = 0; s < _ring.Length; s++)
-            {
-                if (!_ring[s].inUse || _ring[s].timestampMs > presentTs) continue;
-                if (best < 0 || _ring[s].timestampMs > _ring[best].timestampMs) best = s;
-            }
-
-            if (best >= 0)
+            // 시간순 원형 큐의 head를 재생 시각 이전의 가장 최신 프레임까지 전진한다.
+            // 선택된 head는 다음 프레임으로 전진할 때까지 점유해 CPU 샘플 참조를 보호한다.
+            if (_frameQueue.TryAdvanceToLatestAtOrBefore(
+                    presentTs, out var selectedSlot, out var selectedTimestampMs)
+                && selectedTimestampMs > _lastPresentedTs)
             {
                 if (FramePresenter.Instance != null)
                     FramePresenter.Instance.Present(
-                        _ring[best].buffer, _ring[best].width, _ring[best].height);
-                _lastPresentedTs = _ring[best].timestampMs;
-                _presentedBuffer = _ring[best].buffer; // 참조만 — 다음 캡처 전까지 유효
-                _presentedW = _ring[best].width;
-                _presentedH = _ring[best].height;
+                        _frameSlots[selectedSlot].buffer,
+                        _frameSlots[selectedSlot].width,
+                        _frameSlots[selectedSlot].height);
+                _lastPresentedTs = selectedTimestampMs;
+                _presentedBuffer = _frameSlots[selectedSlot].buffer;
+                _presentedW = _frameSlots[selectedSlot].width;
+                _presentedH = _frameSlots[selectedSlot].height;
                 _hasPresentedFrame = true;
                 _statPresents++;
-
-                // 표시했거나 재생 시계가 지나친 프레임 반납
-                // (Present는 LoadRawTextureData로 즉시 복사하므로 반납해도 안전)
-                for (var s = 0; s < _ring.Length; s++)
-                {
-                    if (_ring[s].inUse && _ring[s].timestampMs <= _lastPresentedTs)
-                        _ring[s].inUse = false;
-                }
             }
 
             if (_lastPresentedTs >= 0) InterpolateLandmarks(_lastPresentedTs, inferenceDead);
@@ -1054,7 +1037,7 @@ namespace ARMakeup.Face
                 _lastResultTimestampMs = -1.0;
             }
 
-            for (var s = 0; s < _ring.Length; s++) _ring[s].inUse = false; // 표시 프레임 폐기
+            _frameQueue.Reset();             // 표시 프레임 점유 순서만 폐기(할당 메모리는 재사용)
             _lastPresentedTs = -1.0;         // 새 프레임 표시 전까지 보간·외삽 중단
             _hasPresentedFrame = false;      // 엣지 스냅 샘플러의 이전 프레임 참조 차단
             HasFace = false;
