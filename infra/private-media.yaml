@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AURA private user-media bucket and least-privilege ECS task-role access.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aura
+    AllowedPattern: "[a-zA-Z0-9-]+"
+    MaxLength: 40
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedPattern: "[a-zA-Z0-9-]+"
+    MaxLength: 20
+  PrivateMediaBucketName:
+    Type: String
+    Default: ""
+    Description: Optional globally unique bucket name. Empty lets CloudFormation generate one.
+  ApiTaskRoleName:
+    Type: String
+    Description: Existing ECS API task role name, not its ARN.
+  AiWorkerTaskRoleName:
+    Type: String
+    Default: ""
+    Description: Optional existing AI worker task role name. May equal ApiTaskRoleName.
+  MakeupPrivateAssetPrefix:
+    Type: String
+    Default: private/generated-makeup-recommendations
+    AllowedPattern: "[a-zA-Z0-9/_-]+"
+    Description: Private prefix used by personalized makeup recommendation assets.
+  EnableLegacyMediaMigration:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Temporarily grant exact legacy read/delete and CloudFront verification permissions.
+  LegacyPublicMediaBucketName:
+    Type: String
+    Default: ""
+    Description: Existing CDN-backed media bucket. Required only while migration is enabled.
+  LegacyCloudFrontDistributionId:
+    Type: String
+    Default: ""
+    Description: Existing media distribution id. Required only while migration is enabled.
+
+Conditions:
+  HasExplicitBucketName: !Not [!Equals [!Ref PrivateMediaBucketName, ""]]
+  HasAiWorkerTaskRole: !Not [!Equals [!Ref AiWorkerTaskRoleName, ""]]
+  HasDistinctAiWorkerTaskRole: !And
+    - !Condition HasAiWorkerTaskRole
+    - !Not [!Equals [!Ref AiWorkerTaskRoleName, !Ref ApiTaskRoleName]]
+  LegacyMediaMigrationEnabled: !Equals [!Ref EnableLegacyMediaMigration, "true"]
+
+Rules:
+  RequireLegacyMigrationTargets:
+    RuleCondition: !Equals [!Ref EnableLegacyMediaMigration, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref LegacyPublicMediaBucketName, ""]]
+        AssertDescription: LegacyPublicMediaBucketName is required while migration is enabled.
+      - Assert: !Not [!Equals [!Ref LegacyCloudFrontDistributionId, ""]]
+        AssertDescription: LegacyCloudFrontDistributionId is required while migration is enabled.
+
+Resources:
+  PrivateMediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !If
+        - HasExplicitBucketName
+        - !Ref PrivateMediaBucketName
+        - !Ref "AWS::NoValue"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-abandoned-private-media-staging
+            Status: Enabled
+            Prefix: uploads/staging/user-media/
+            ExpirationInDays: 1
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+          - Id: remove-expired-private-media-staging-delete-markers
+            Status: Enabled
+            Prefix: uploads/staging/user-media/
+            ExpiredObjectDeleteMarker: true
+      Tags:
+        - Key: aura:data-classification
+          Value: sensitive-user-media
+        - Key: aura:environment
+          Value: !Ref EnvironmentName
+
+  PrivateMediaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref PrivateMediaBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt PrivateMediaBucket.Arn
+              - !Sub ${PrivateMediaBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: DenyMissingServerSideEncryptionHeader
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource:
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
+            Condition:
+              "Null":
+                s3:x-amz-server-side-encryption: "true"
+          - Sid: DenyUnexpectedServerSideEncryption
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource:
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+
+  PrivateMediaTaskPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: !Sub ${ProjectName}-${EnvironmentName} private user-media access
+      Roles: !If
+        - HasDistinctAiWorkerTaskRole
+        - - !Ref ApiTaskRoleName
+          - !Ref AiWorkerTaskRoleName
+        - - !Ref ApiTaskRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadWriteOwnedPrivateMediaObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:PutObject
+              - s3:PutObjectTagging
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+            Resource:
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
+          - Sid: ReadPrivateMediaBucketVersioning
+            Effect: Allow
+            Action: s3:GetBucketVersioning
+            Resource: !GetAtt PrivateMediaBucket.Arn
+          - Sid: ListOnlyManagedPrivateMediaVersions
+            Effect: Allow
+            Action: s3:ListBucketVersions
+            Resource: !GetAtt PrivateMediaBucket.Arn
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - uploads/staging/user-media/*
+                  - private/user-media/*
+                  - !Sub ${MakeupPrivateAssetPrefix}/*
+
+  LegacyMediaMigrationTaskPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: LegacyMediaMigrationEnabled
+    Properties:
+      Description: !Sub ${ProjectName}-${EnvironmentName} temporary legacy media migration access
+      Roles:
+        - !Ref ApiTaskRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadAndDeleteExactLegacyMediaPrefixes
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/capture/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/capture-thumbnail/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/face-analysis-source/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/face-analysis-source-thumbnail/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/filter-extraction/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/filter-extraction-thumbnail/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback-thumbnail/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/analysis-preview/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*
+          - Sid: InspectExactLegacyMediaVersions
+            Effect: Allow
+            Action:
+              - s3:GetBucketVersioning
+              - s3:ListBucketVersions
+            Resource: !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - uploads/capture/*
+                  - uploads/capture-thumbnail/*
+                  - uploads/face-analysis-source/*
+                  - uploads/face-analysis-source-thumbnail/*
+                  - uploads/filter-extraction/*
+                  - uploads/filter-extraction-thumbnail/*
+                  - uploads/makeup_feedback/*
+                  - uploads/makeup_feedback-thumbnail/*
+                  - uploads/analysis-preview/*
+                  - !Sub ${MakeupPrivateAssetPrefix}/*
+          - Sid: VerifyLegacyCloudFrontInvalidations
+            Effect: Allow
+            Action:
+              - cloudfront:GetDistribution
+              - cloudfront:GetInvalidation
+            Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${LegacyCloudFrontDistributionId}
+
+Outputs:
+  PrivateMediaBucketName:
+    Description: Set this value as the PRIVATE_MEDIA_BUCKET_NAME GitHub repository variable.
+    Value: !Ref PrivateMediaBucket
+  PrivateMediaBucketArn:
+    Value: !GetAtt PrivateMediaBucket.Arn

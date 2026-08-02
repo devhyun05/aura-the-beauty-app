@@ -1,3 +1,4 @@
+import hashlib
 from uuid import uuid4
 from urllib.parse import urlencode
 
@@ -21,6 +22,14 @@ PRIVATE_HAIR_MEDIA_KINDS = {
 }
 PRIVATE_HAIR_OBJECT_PREFIXES = tuple(f"uploads/{kind}/" for kind in PRIVATE_HAIR_MEDIA_KINDS)
 PRIVATE_GOLDEN_MASK_OBJECT_PREFIX = f"uploads/{GOLDEN_MASK_MEDIA_KIND}/"
+SENSITIVE_USER_MEDIA_KINDS = {
+  "capture",
+  "face-analysis-source",
+  "filter-extraction",
+  "makeup_feedback",
+}
+PRIVATE_USER_MEDIA_STAGING_PREFIX = "uploads/staging/user-media/"
+PRIVATE_USER_MEDIA_OBJECT_PREFIX = "private/user-media/"
 PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX = "uploads/generated-makeup-recommendations/"
 SERVER_MANAGED_MEDIA_KINDS = {
   "face-analysis",
@@ -46,6 +55,15 @@ def is_private_hair_object_key(object_key: str) -> bool:
 
 def is_private_golden_mask_object_key(object_key: str) -> bool:
   return object_key.startswith(PRIVATE_GOLDEN_MASK_OBJECT_PREFIX)
+
+
+def is_private_user_media_object_key(object_key: str) -> bool:
+  return object_key.startswith(PRIVATE_USER_MEDIA_OBJECT_PREFIX)
+
+
+def media_location_log_token(*, bucket: str, object_key: str) -> str:
+  """Return a non-reversible correlation token safe for operational logs."""
+  return hashlib.sha256(f"{bucket}\0{object_key}".encode("utf-8")).hexdigest()[:16]
 
 
 def is_makeup_recommendation_object_key(object_key: str, settings: Settings) -> bool:
@@ -90,15 +108,54 @@ class S3Service:
   def client(self):
     return self._client()
 
+  def private_media_bucket(self) -> str:
+    if self.settings.private_media_bucket_name:
+      if (
+        self.settings.environment.strip().lower() not in {"local", "test"}
+        and self.settings.private_media_bucket_name == self.settings.s3_bucket_name
+      ):
+        raise AppError(
+          503,
+          "PRIVATE_MEDIA_BUCKET_NOT_ISOLATED",
+          "PRIVATE_MEDIA_BUCKET_NAME must be isolated from the CDN-backed media bucket.",
+        )
+      return self.settings.private_media_bucket_name
+    if self.settings.environment.strip().lower() in {"local", "test"} and self.settings.s3_bucket_name:
+      return self.settings.s3_bucket_name
+    raise AppError(
+      503,
+      "PRIVATE_MEDIA_BUCKET_NOT_CONFIGURED",
+      "PRIVATE_MEDIA_BUCKET_NAME is required for sensitive user media.",
+    )
+
   def assert_managed_media_location(self, *, bucket: str, object_key: str) -> None:
     configured_bucket = self.settings.s3_bucket_name
-    if not configured_bucket:
+    private_bucket = self.settings.private_media_bucket_name
+    private_makeup_prefix = self.settings.makeup_private_asset_prefix.strip("/") + "/"
+    if not configured_bucket and not private_bucket:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for media access.")
+    private_managed = bool(
+      private_bucket
+      and bucket == private_bucket
+      and object_key.startswith(
+        (PRIVATE_USER_MEDIA_STAGING_PREFIX, PRIVATE_USER_MEDIA_OBJECT_PREFIX, private_makeup_prefix),
+      )
+    )
+    if (
+      not private_managed
+      and self.settings.environment.strip().lower() in {"local", "test"}
+      and configured_bucket
+      and bucket == configured_bucket
+      and object_key.startswith(
+        (PRIVATE_USER_MEDIA_STAGING_PREFIX, PRIVATE_USER_MEDIA_OBJECT_PREFIX, private_makeup_prefix),
+      )
+    ):
+      private_managed = True
     managed = object_key.startswith(MANAGED_MEDIA_OBJECT_PREFIXES) or is_makeup_recommendation_object_key(
       object_key,
       self.settings,
     )
-    if bucket != configured_bucket or not managed:
+    if not private_managed and (bucket != configured_bucket or not managed):
       raise AppError(403, "S3_TARGET_NOT_MANAGED", "The requested object is outside the managed media location.")
 
   def create_presigned_upload(
@@ -108,23 +165,29 @@ class S3Service:
     original_filename: str | None,
     expires_in: int = 900,
   ) -> dict[str, str | int | None | dict[str, str]]:
-    if not self.settings.s3_bucket_name:
+    if not self.settings.s3_bucket_name and media_kind not in SENSITIVE_USER_MEDIA_KINDS:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for uploads.")
 
     extension = upload_extension_for_content_type(content_type)
 
-    object_key = f"uploads/{media_kind}/{uuid4()}{extension}"
+    is_sensitive_user_media = media_kind in SENSITIVE_USER_MEDIA_KINDS
+    bucket = self.private_media_bucket() if is_sensitive_user_media else self.settings.s3_bucket_name
+    object_key = (
+      f"{PRIVATE_USER_MEDIA_STAGING_PREFIX}{uuid4()}{extension}"
+      if is_sensitive_user_media
+      else f"uploads/{media_kind}/{uuid4()}{extension}"
+    )
     is_golden_mask = media_kind == GOLDEN_MASK_MEDIA_KIND
-    is_private_media = media_kind in PRIVATE_HAIR_MEDIA_KINDS or is_golden_mask
+    is_private_media = is_sensitive_user_media or media_kind in PRIVATE_HAIR_MEDIA_KINDS or is_golden_mask
     cache_control = "private, no-store" if is_private_media else "public, max-age=31536000, immutable"
     put_params = {
-      "Bucket": self.settings.s3_bucket_name,
+      "Bucket": bucket,
       "ContentType": content_type,
       "Key": object_key,
       "CacheControl": cache_control,
     }
     required_headers: dict[str, str] | None = None
-    if is_golden_mask:
+    if is_golden_mask or is_sensitive_user_media:
       put_params["ServerSideEncryption"] = "AES256"
       required_headers = {
         "Content-Type": content_type,
@@ -140,7 +203,7 @@ class S3Service:
     cdn_base_url = self.settings.effective_cdn_base_url
 
     result: dict[str, str | int | None | dict[str, str]] = {
-      "bucket": self.settings.s3_bucket_name,
+      "bucket": bucket,
       "object_key": object_key,
       "upload_url": upload_url,
       "cdn_url": None if is_private_media else (f"{cdn_base_url}/{object_key}" if cdn_base_url else ""),
@@ -209,6 +272,22 @@ class S3Service:
       "content_type": str(response.get("ContentType") or "application/octet-stream").split(";", 1)[0].lower(),
     }
 
+  def get_object_identity(self, *, bucket: str, object_key: str) -> dict[str, str | None]:
+    """Return immutable-copy evidence without exposing object data or locations."""
+    self.assert_managed_media_location(bucket=bucket, object_key=object_key)
+    try:
+      response = self._client().head_object(Bucket=bucket, Key=object_key)
+    except ClientError as exc:
+      error_code = str(exc.response.get("Error", {}).get("Code") or "")
+      if error_code in {"404", "NoSuchKey", "NotFound"}:
+        return {"etag": None, "version_id": None, "exists": "false"}
+      raise
+    return {
+      "etag": str(response.get("ETag") or "").strip('"') or None,
+      "version_id": str(response.get("VersionId") or "") or None,
+      "exists": "true",
+    }
+
   def create_presigned_download(
     self,
     *,
@@ -268,6 +347,7 @@ class S3Service:
       "Body": body,
       "ContentType": content_type,
       "CacheControl": "private, no-store",
+      "ServerSideEncryption": "AES256",
     }
     if tags:
       params["Tagging"] = urlencode(tags)

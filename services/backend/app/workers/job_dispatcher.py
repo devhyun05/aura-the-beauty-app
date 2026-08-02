@@ -11,6 +11,7 @@ from app.api.makeup_recommendations import run_recommendation_image_job
 from app.core.settings import Settings
 from app.db.session import Database
 from app.schemas.analysis import AnalysisJobCreate, FilterExtractionAnalyzeRequest
+from app.services.account_identity import log_identifier_token
 
 
 SUPPORTED_AI_JOB_MESSAGE_VERSION = 1
@@ -180,9 +181,9 @@ class AIJobDispatcher:
 
   async def dispatch_analysis(self, message: ParsedAIJobMessage) -> None:
     logger.info(
-      "[aura:ai-job-worker] analysis:received jobId=%s userId=%s",
+      "[aura:ai-job-worker] analysis:received jobId=%s userToken=%s",
       message.job_id,
-      message.user_id,
+      log_identifier_token(message.user_id),
     )
     report = await self.db.fetchrow(
       """
@@ -208,9 +209,9 @@ class AIJobDispatcher:
 
     if report is None:
       logger.warning(
-        "[aura:ai-job-worker] analysis:missing jobId=%s userId=%s",
+        "[aura:ai-job-worker] analysis:missing jobId=%s userToken=%s",
         message.job_id,
-        message.user_id,
+        log_identifier_token(message.user_id),
       )
       return
 
@@ -234,9 +235,9 @@ class AIJobDispatcher:
 
   async def dispatch_makeup_recommendation(self, message: ParsedAIJobMessage) -> None:
     logger.info(
-      "[aura:ai-job-worker] makeup-recommendation:received jobId=%s userId=%s",
+      "[aura:ai-job-worker] makeup-recommendation:received jobId=%s userToken=%s",
       message.job_id,
-      message.user_id,
+      log_identifier_token(message.user_id),
     )
     look_id = message.payload.get("lookId")
     if isinstance(look_id, str):
@@ -257,9 +258,9 @@ class AIJobDispatcher:
 
   async def dispatch_feedback(self, message: ParsedAIJobMessage) -> None:
     logger.info(
-      "[aura:ai-job-worker] feedback:received jobId=%s userId=%s",
+      "[aura:ai-job-worker] feedback:received jobId=%s userToken=%s",
       message.job_id,
-      message.user_id,
+      log_identifier_token(message.user_id),
     )
     report = await self.db.fetchrow(
       """
@@ -278,9 +279,9 @@ class AIJobDispatcher:
 
     if report is None:
       logger.warning(
-        "[aura:ai-job-worker] feedback:missing jobId=%s userId=%s",
+        "[aura:ai-job-worker] feedback:missing jobId=%s userToken=%s",
         message.job_id,
-        message.user_id,
+        log_identifier_token(message.user_id),
       )
       return
 
@@ -305,9 +306,9 @@ class AIJobDispatcher:
 
   async def dispatch_filter_extraction(self, message: ParsedAIJobMessage) -> None:
     logger.info(
-      "[aura:ai-job-worker] filter-extraction:received jobId=%s userId=%s",
+      "[aura:ai-job-worker] filter-extraction:received jobId=%s userToken=%s",
       message.job_id,
-      message.user_id,
+      log_identifier_token(message.user_id),
     )
     report = await self.db.fetchrow(
       """
@@ -330,9 +331,9 @@ class AIJobDispatcher:
 
     if report is None:
       logger.warning(
-        "[aura:ai-job-worker] filter-extraction:missing jobId=%s userId=%s",
+        "[aura:ai-job-worker] filter-extraction:missing jobId=%s userToken=%s",
         message.job_id,
-        message.user_id,
+        log_identifier_token(message.user_id),
       )
       return
 

@@ -12,3 +12,8 @@ def hash_auth_subject(provider: str, subject: str) -> str:
   identity = f"{normalize_auth_provider(provider)}\0{subject}"
 
   return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def log_identifier_token(value: object) -> str:
+  """Return a stable, non-reversible token suitable for correlation logs."""
+  return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:16]

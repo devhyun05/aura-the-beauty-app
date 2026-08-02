@@ -19,6 +19,16 @@ from app.services.reference_makeup_extraction import (
   enrich_reference_makeup_products,
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
+from app.services.media_deletion import (
+  MediaObjectRef,
+  enqueue_unreferenced_report_media_deletions,
+  ensure_media_deletion_schema,
+  process_media_deletion_outbox_items,
+)
+from app.services.private_media_delivery import (
+  create_owned_media_delivery_urls,
+  project_payload_with_private_media,
+)
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
@@ -50,6 +60,52 @@ def normalize_filter_extraction_report_row(row: dict | None) -> dict | None:
   normalized = dict(row)
   normalized["result_payload"] = decode_json_object(normalized.get("result_payload"))
   return normalized
+
+
+async def project_filter_extraction_reports_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  reports: list[dict],
+) -> list[dict]:
+  delivery_urls = await create_owned_media_delivery_urls(
+    db,
+    settings,
+    owner_user_id=owner_user_id,
+    media_ids=[report.get("result_media_id") for report in reports],
+  )
+  projected_reports: list[dict] = []
+  for report in reports:
+    projected = dict(report)
+    media_id = projected.get("result_media_id")
+    delivery_url = delivery_urls.get(str(media_id)) if media_id else None
+    projected["result_payload"] = project_payload_with_private_media(
+      decode_json_object(projected.get("result_payload")),
+      delivery_url=delivery_url,
+    )
+    projected_reports.append(projected)
+  return projected_reports
+
+
+async def project_filter_extraction_report_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  report: dict | None,
+) -> dict | None:
+  normalized = normalize_filter_extraction_report_row(report)
+  if normalized is None:
+    return None
+  return (
+    await project_filter_extraction_reports_with_private_media(
+      db,
+      settings,
+      owner_user_id=owner_user_id,
+      reports=[normalized],
+    )
+  )[0]
 
 
 def build_filter_extraction_request_state(payload: FilterExtractionAnalyzeRequest) -> dict[str, Any]:
@@ -273,7 +329,13 @@ async def create_filter_extraction_job(
     json.dumps({"request": request_payload}),
   )
 
-  return success({"job": normalize_filter_extraction_report_row(report)})
+  projected_report = await project_filter_extraction_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"job": projected_report})
 
 
 @router.post("/analyze")
@@ -349,7 +411,13 @@ async def analyze_filter_extraction(
     settings,
   )
 
-  return success({"job": normalize_filter_extraction_report_row(report)})
+  projected_report = await project_filter_extraction_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"job": projected_report})
 
 
 @router.get("")
@@ -358,6 +426,7 @@ async def list_filter_extractions(
   offset: int = Query(default=0, ge=0),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   reports = await db.fetch(
@@ -374,13 +443,20 @@ async def list_filter_extractions(
     offset,
   )
 
+  normalized_reports = [
+    normalized
+    for report in reports
+    if (normalized := normalize_filter_extraction_report_row(report)) is not None
+  ]
+  projected_reports = await project_filter_extraction_reports_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    reports=normalized_reports,
+  )
   return success(
     {
-      "reports": [
-        normalized
-        for report in reports
-        if (normalized := normalize_filter_extraction_report_row(report)) is not None
-      ],
+      "reports": projected_reports,
       "limit": limit,
       "offset": offset,
     },
@@ -392,6 +468,7 @@ async def get_filter_extraction(
   report_id: UUID,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
@@ -409,27 +486,101 @@ async def get_filter_extraction(
 
     raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
 
-  return success({"report": normalize_filter_extraction_report_row(report)})
+  projected_report = await project_filter_extraction_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"report": projected_report})
 
 
 @router.delete("/{report_id}")
 async def delete_filter_extraction(
   report_id: UUID,
+  background_tasks: BackgroundTasks,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
+  await ensure_media_deletion_schema(db)
   user = await ensure_user(db, auth)
-  deleted_report = await db.fetchrow(
-    """
-    delete from filter_extraction_reports
-    where id = $1 and user_id = $2
-    returning id
-    """,
-    report_id,
-    user["id"],
-  )
+  if db.pool is None:
+    raise AppError(503, "DATABASE_NOT_CONFIGURED", "Database is not connected.")
 
-  if not deleted_report:
-    raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
+  async def delete_and_queue(connection) -> tuple[list[UUID], int]:
+    report = await connection.fetchrow(
+      """
+      select id
+      from filter_extraction_reports
+      where id = $1 and user_id = $2
+      for update
+      """,
+      report_id,
+      user["id"],
+    )
+    if report is None:
+      raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
 
-  return success({"deleted": True, "reportId": str(report_id)})
+    media_rows = await connection.fetch(
+      """
+      select distinct
+        media.id as media_asset_id,
+        media.bucket,
+        media.object_key
+      from filter_extraction_reports report
+      left join photo_captures capture on capture.id = report.photo_capture_id
+      cross join lateral (
+        values (report.result_media_id), (capture.media_id)
+      ) as candidate(media_id)
+      join media_assets media on media.id = candidate.media_id
+      where report.id = $1
+        and report.user_id = $2
+        and media.owner_user_id = $2
+        and media.deleted_at is null
+        and media.bucket is not null
+        and media.object_key is not null
+      """,
+      report_id,
+      user["id"],
+    )
+
+    await connection.execute(
+      """
+      delete from filter_extraction_reports
+      where id = $1 and user_id = $2
+      """,
+      report_id,
+      user["id"],
+    )
+
+    refs = [
+      MediaObjectRef(
+        bucket=str(row["bucket"]),
+        object_key=str(row["object_key"]),
+        media_asset_id=row["media_asset_id"],
+      )
+      for row in media_rows
+    ]
+    return await enqueue_unreferenced_report_media_deletions(
+      connection,
+      report_id=report_id,
+      refs=refs,
+      reason="filter_extraction_report_deleted",
+    )
+
+  outbox_ids, skipped_referenced_count = await db.run_in_transaction(delete_and_queue)
+  if outbox_ids:
+    background_tasks.add_task(
+      process_media_deletion_outbox_items,
+      db,
+      settings,
+      outbox_ids,
+    )
+
+  return success({
+    "deleted": True,
+    "outboxCount": len(outbox_ids),
+    "reportId": str(report_id),
+    "skippedReferencedCount": skipped_referenced_count,
+  })

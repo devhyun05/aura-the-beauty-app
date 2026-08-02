@@ -20,7 +20,7 @@ from app.services.media_uploads import (
   issue_upload_session,
   resolve_legacy_upload_session_id,
 )
-from app.services.s3 import S3Service
+from app.services.s3 import S3Service, media_location_log_token
 from app.services.users import ensure_user
 
 
@@ -77,17 +77,18 @@ async def refresh_postprocessed_thumbnail_metadata(
 
   if thumbnail is None:
     logger.info(
-      "[aura:media-api] thumbnail:background-missing mediaId=%s key=%s",
-      media_id,
-      object_key,
+      "[aura:media-api] thumbnail:background-missing location=%s",
+      media_location_log_token(bucket=bucket, object_key=object_key),
     )
     return
 
   await update_media_thumbnail_metadata(db, media_id, thumbnail)
   logger.info(
-    "[aura:media-api] thumbnail:background-updated mediaId=%s thumbnailKey=%s",
-    media_id,
-    thumbnail.object_key,
+    "[aura:media-api] thumbnail:background-updated location=%s",
+    media_location_log_token(
+      bucket=thumbnail.bucket,
+      object_key=thumbnail.object_key,
+    ),
   )
 
 

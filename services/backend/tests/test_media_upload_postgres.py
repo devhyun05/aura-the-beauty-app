@@ -97,7 +97,7 @@ async def test_upload_claim_insert_and_idempotency_are_atomic_in_postgres() -> N
     await connection.execute("insert into users (id) values ($1)", owner_user_id)
     payload = PresignedUploadRequest.model_validate(
       {
-        "mediaKind": "capture",
+        "mediaKind": "profile-avatar",
         "contentType": "image/jpeg",
         "byteSize": 123,
         "source": "camera",

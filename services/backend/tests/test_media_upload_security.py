@@ -1,6 +1,8 @@
+from io import BytesIO
 from uuid import UUID, uuid4
 
 import pytest
+from PIL import Image
 from pydantic import ValidationError
 
 from app.api import media as media_api
@@ -21,6 +23,8 @@ class FakeS3Service:
   def __init__(self) -> None:
     self.created_kinds: list[str] = []
     self.metadata_calls: list[tuple[str, str]] = []
+    self.private_puts: list[dict] = []
+    self.deleted: list[tuple[str, str]] = []
 
   def create_presigned_upload(
     self,
@@ -51,6 +55,20 @@ class FakeS3Service:
     if bucket != "media-bucket" or not object_key.startswith("uploads/"):
       raise AppError(403, "S3_TARGET_NOT_MANAGED", "Not managed")
 
+  def get_object_bytes(self, *, bucket: str, object_key: str, max_bytes: int | None = None):
+    output = BytesIO()
+    Image.new("RGB", (100, 100), (180, 140, 120)).save(output, format="JPEG")
+    return output.getvalue(), "image/jpeg"
+
+  def private_media_bucket(self) -> str:
+    return "media-bucket"
+
+  def put_private_object(self, **kwargs) -> None:
+    self.private_puts.append(kwargs)
+
+  def delete_object_permanently(self, *, bucket: str, object_key: str) -> None:
+    self.deleted.append((bucket, object_key))
+
 
 class IssueUploadDatabase:
   def __init__(self) -> None:
@@ -80,8 +98,8 @@ class CompleteUploadDatabase:
       return {
         "id": uuid4(),
         "owner_user_id": self.allowed_owner_id,
-        "bucket": self.session["bucket"],
-        "object_key": self.session["object_key"],
+        "bucket": args[4],
+        "object_key": args[5],
       }
     raise AssertionError(f"Unexpected query: {query}")
 
@@ -298,12 +316,23 @@ async def test_complete_uses_bound_location_and_s3_metadata() -> None:
   )
 
   assert media["bucket"] == "media-bucket"
-  assert media["object_key"] == "uploads/capture/main.jpg"
+  assert media["object_key"].startswith(f"private/user-media/users/{owner_user_id}/capture/")
   assert s3.metadata_calls == [("media-bucket", "uploads/capture/main.jpg")]
+  assert len(s3.private_puts) == 1
+  assert s3.private_puts[0]["content_type"] == "image/jpeg"
+  assert s3.deleted == [("media-bucket", "uploads/capture/main.jpg")]
   assert db.claim_args is not None
   assert db.claim_args[0:3] == (session["id"], owner_user_id, None)
   assert isinstance(db.claim_args[3], UUID)
-  assert db.claim_args[4:6] == (None, 123)
+  assert db.claim_args[4:8] == (
+    "media-bucket",
+    media["object_key"],
+    None,
+    "image/jpeg",
+  )
+  assert db.claim_args[8:10] == (100, 100)
+  assert db.claim_args[10] is None
+  assert db.claim_args[11] > 0
 
 
 @pytest.mark.asyncio

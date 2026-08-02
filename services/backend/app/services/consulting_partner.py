@@ -13,6 +13,7 @@ from app.core.security import AuthContext
 from app.core.settings import get_settings as get_app_settings
 from app.db.session import Database
 from app.services.consulting_message_store import list_consulting_messages
+from app.services.private_media_delivery import create_owned_media_delivery_urls
 
 
 PARTNER_SESSION_TTL_DAYS = 14
@@ -1708,6 +1709,16 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
     detail_payload = _decode_json(row.get("detail_payload"), {})
     source_image_url = row.get("source_image_url")
     preview_image_url = row.get("preview_image_url")
+    delivery_urls = await create_owned_media_delivery_urls(
+      db,
+      get_app_settings(),
+      owner_user_id=row["user_id"],
+      media_ids=(row.get("source_media_id"), row.get("preview_media_id")),
+    )
+    if row.get("source_media_id") is not None:
+      source_image_url = delivery_urls.get(str(row["source_media_id"]))
+    if row.get("preview_media_id") is not None:
+      preview_image_url = delivery_urls.get(str(row["preview_media_id"]))
     return {
       "report": _shared_report_from_analysis(row),
       "kind": "analysis",
@@ -1743,11 +1754,20 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
   if feedback is not None:
     row = dict(feedback)
     detail = _decode_json(row.get("feedback_payload"), {})
+    uploaded_image_url = row.get("uploaded_image_url")
+    if row.get("uploaded_media_id") is not None:
+      delivery_urls = await create_owned_media_delivery_urls(
+        db,
+        get_app_settings(),
+        owner_user_id=row["user_id"],
+        media_ids=(row["uploaded_media_id"],),
+      )
+      uploaded_image_url = delivery_urls.get(str(row["uploaded_media_id"]))
     if isinstance(detail, dict):
       detail = {
         **detail,
-        "image_url": row.get("uploaded_image_url"),
-        "source_image_url": row.get("uploaded_image_url"),
+        "image_url": uploaded_image_url,
+        "source_image_url": uploaded_image_url,
       }
     return {
       "report": _shared_report_from_feedback(row),

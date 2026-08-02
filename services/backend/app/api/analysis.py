@@ -19,6 +19,7 @@ from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate, GoldenMaskAttachRequest
 from app.schemas.face_analysis_v2 import FaceAnalysisStageRetryRequest
 from app.services.ai_job_queue import AIJobQueuePublisher
+from app.services.account_identity import log_identifier_token
 from app.services.embeddings import embed_text, format_pgvector, report_embedding_text
 from app.services.face_analysis_ai import FaceAnalysisAI
 from app.services.face_analysis_pipeline import (
@@ -54,6 +55,11 @@ from app.services.owned_media import (
   trusted_media_request_payload,
 )
 from app.services.push_notifications import create_and_send_notification
+from app.services.private_media_delivery import (
+  create_owned_media_delivery_urls,
+  project_payload_with_private_media,
+  project_private_media_reference,
+)
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.s3 import S3Service, is_private_golden_mask_object_key
 from app.services.users import ensure_user
@@ -329,6 +335,96 @@ def normalize_analysis_report_rows(rows: list[dict]) -> list[dict]:
     for row in rows
     if (normalized := normalize_analysis_report_row(row)) is not None
   ]
+
+
+async def project_analysis_reports_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  reports: list[dict],
+) -> list[dict]:
+  media_ids: list[UUID | str | None] = []
+  for report in reports:
+    source_media = report.get("source_media")
+    preview_media = report.get("preview_media")
+    media_ids.extend(
+      (
+        source_media.get("id")
+        if isinstance(source_media, dict)
+        else report.get("source_media_id"),
+        preview_media.get("id")
+        if isinstance(preview_media, dict)
+        else report.get("preview_media_id"),
+      ),
+    )
+
+  delivery_urls = await create_owned_media_delivery_urls(
+    db,
+    settings,
+    owner_user_id=owner_user_id,
+    media_ids=media_ids,
+  )
+
+  projected_reports: list[dict] = []
+  for report in reports:
+    projected = dict(report)
+    source_media = projected.get("source_media")
+    preview_media = projected.get("preview_media")
+    source_media_id = (
+      source_media.get("id")
+      if isinstance(source_media, dict)
+      else projected.get("source_media_id")
+    )
+    preview_media_id = (
+      preview_media.get("id")
+      if isinstance(preview_media, dict)
+      else projected.get("preview_media_id")
+    )
+    source_delivery_url = (
+      delivery_urls.get(str(source_media_id)) if source_media_id else None
+    )
+    preview_delivery_url = (
+      delivery_urls.get(str(preview_media_id)) if preview_media_id else None
+    )
+
+    if isinstance(source_media, dict):
+      projected["source_media"] = project_private_media_reference(
+        source_media,
+        source_delivery_url,
+      )
+    if isinstance(preview_media, dict):
+      projected["preview_media"] = project_private_media_reference(
+        preview_media,
+        preview_delivery_url,
+      )
+    projected["detail_payload"] = project_payload_with_private_media(
+      decode_json_object(projected.get("detail_payload")),
+      delivery_url=source_delivery_url,
+      preview_delivery_url=preview_delivery_url,
+    )
+    projected_reports.append(projected)
+  return projected_reports
+
+
+async def project_analysis_report_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  report: dict | None,
+) -> dict | None:
+  normalized = normalize_analysis_report_row(report)
+  if normalized is None:
+    return None
+  return (
+    await project_analysis_reports_with_private_media(
+      db,
+      settings,
+      owner_user_id=owner_user_id,
+      reports=[normalized],
+    )
+  )[0]
 
 
 def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> dict:
@@ -716,8 +812,8 @@ async def create_analysis_job(
     per_day=settings.face_analysis_generation_limit_per_day,
   )
   logger.info(
-    "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s executionMode=%s",
-    auth.subject,
+    "[aura:analysis-api] job:create-start userToken=%s runImmediately=%s executionMode=%s",
+    log_identifier_token(auth.subject),
     payload.run_immediately,
     execution_mode,
   )
@@ -818,23 +914,39 @@ async def create_analysis_job(
       settings,
     )
 
-  return success({"job": normalize_analysis_report_row(report)})
+  projected_report = await project_analysis_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"job": projected_report})
 
 @router.get("/jobs/{job_id}")
 async def get_analysis_job(
   job_id: UUID,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   job = await db.fetchrow(
     f"""
     select {ANALYSIS_MEDIA_SELECT}
     from analysis_reports r
-    left join media_assets source_media on source_media.id = r.source_media_id
-    left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets source_media
+      on source_media.id = r.source_media_id
+      and source_media.owner_user_id = r.user_id
+      and source_media.status = 'active'
+      and source_media.deleted_at is null
+    left join media_assets preview_media
+      on preview_media.id = r.preview_media_id
+      and preview_media.owner_user_id = r.user_id
+      and preview_media.status = 'active'
+      and preview_media.deleted_at is null
     left join media_assets golden_mask_media
       on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.owner_user_id = r.user_id
       and golden_mask_media.status = 'active'
       and golden_mask_media.deleted_at is null
     where r.id = $1 and r.user_id = $2 and r.deleted_at is null
@@ -846,7 +958,13 @@ async def get_analysis_job(
   if not job:
     raise AppError(404, "ANALYSIS_JOB_NOT_FOUND", "Analysis job was not found.")
 
-  return success({"job": normalize_analysis_report_row(job)})
+  projected_job = await project_analysis_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=job,
+  )
+  return success({"job": projected_job})
 
 
 @router.post("/jobs/{job_id}/retry")
@@ -947,7 +1065,13 @@ async def retry_analysis_job_stage(
     payload,
     settings,
   )
-  return success({"job": normalize_analysis_report_row(updated)})
+  projected_job = await project_analysis_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=updated,
+  )
+  return success({"job": projected_job})
 
 
 @router.get("/reports")
@@ -959,6 +1083,7 @@ async def list_analysis_reports(
   limit: int | None = Query(None, ge=1, le=200),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   filters = [
@@ -992,10 +1117,19 @@ async def list_analysis_reports(
   query = f"""
     select {ANALYSIS_MEDIA_LIST_SELECT}
     from analysis_reports r
-    left join media_assets source_media on source_media.id = r.source_media_id
-    left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets source_media
+      on source_media.id = r.source_media_id
+      and source_media.owner_user_id = r.user_id
+      and source_media.status = 'active'
+      and source_media.deleted_at is null
+    left join media_assets preview_media
+      on preview_media.id = r.preview_media_id
+      and preview_media.owner_user_id = r.user_id
+      and preview_media.status = 'active'
+      and preview_media.deleted_at is null
     left join media_assets golden_mask_media
       on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.owner_user_id = r.user_id
       and golden_mask_media.status = 'active'
       and golden_mask_media.deleted_at is null
     where {' and '.join(filters)}
@@ -1012,7 +1146,13 @@ async def list_analysis_reports(
     *values,
   )
 
-  return success({"reports": normalize_analysis_report_rows(reports)})
+  projected_reports = await project_analysis_reports_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    reports=normalize_analysis_report_rows(reports),
+  )
+  return success({"reports": projected_reports})
 
 
 @router.get("/reports/{report_id}")
@@ -1040,10 +1180,19 @@ async def get_analysis_report(
     f"""
     select {ANALYSIS_MEDIA_SELECT}
     from analysis_reports r
-    left join media_assets source_media on source_media.id = r.source_media_id
-    left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets source_media
+      on source_media.id = r.source_media_id
+      and source_media.owner_user_id = r.user_id
+      and source_media.status = 'active'
+      and source_media.deleted_at is null
+    left join media_assets preview_media
+      on preview_media.id = r.preview_media_id
+      and preview_media.owner_user_id = r.user_id
+      and preview_media.status = 'active'
+      and preview_media.deleted_at is null
     left join media_assets golden_mask_media
       on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.owner_user_id = r.user_id
       and golden_mask_media.status = 'active'
       and golden_mask_media.deleted_at is null
     where r.id = $1 and r.user_id = $2 and r.deleted_at is null
@@ -1077,7 +1226,13 @@ async def get_analysis_report(
       },
     )
 
-  return success({"report": normalize_analysis_report_row(report)})
+  projected_report = await project_analysis_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"report": projected_report})
 
 
 async def _attach_analysis_report_golden_mask(
@@ -1472,11 +1627,21 @@ async def delete_analysis_report(
           capture_media.bucket as capture_media_bucket,
           capture_media.object_key as capture_media_object_key
         from analysis_reports r
-        left join media_assets source_media on source_media.id = r.source_media_id
-        left join media_assets preview_media on preview_media.id = r.preview_media_id
-        left join media_assets golden_mask_media on golden_mask_media.id = r.golden_mask_media_id
-        left join photo_captures pc on pc.id = r.photo_capture_id
-        left join media_assets capture_media on capture_media.id = pc.media_id
+        left join media_assets source_media
+          on source_media.id = r.source_media_id
+          and source_media.owner_user_id = r.user_id
+        left join media_assets preview_media
+          on preview_media.id = r.preview_media_id
+          and preview_media.owner_user_id = r.user_id
+        left join media_assets golden_mask_media
+          on golden_mask_media.id = r.golden_mask_media_id
+          and golden_mask_media.owner_user_id = r.user_id
+        left join photo_captures pc
+          on pc.id = r.photo_capture_id
+          and pc.user_id = r.user_id
+        left join media_assets capture_media
+          on capture_media.id = pc.media_id
+          and capture_media.owner_user_id = r.user_id
         where r.id = $1 and r.user_id = $2
         for update of r
         """,
@@ -1539,6 +1704,7 @@ async def delete_analysis_report_recommended_makeup(
   makeup_index: int,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   if makeup_index < 0:
     raise AppError(
@@ -1593,4 +1759,10 @@ async def delete_analysis_report_recommended_makeup(
     json.dumps(detail_payload),
   )
 
-  return success({"report": normalize_analysis_report_row(updated_report)})
+  projected_report = await project_analysis_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=updated_report,
+  )
+  return success({"report": projected_report})

@@ -1662,7 +1662,7 @@ class OpenAIAnalysisService:
 
     bucket, object_key = image_url.removeprefix("s3://").split("/", 1)
     started_at = time.monotonic()
-    logger.info("[aura:openai] source-image:read-start bucket=%s key=%s", bucket, object_key)
+    logger.info("[aura:openai] source-image:read-start source=managed-media")
     image_object = self._s3_client().get_object(Bucket=bucket, Key=object_key)
     image_bytes = image_object["Body"].read()
     logger.info(
@@ -3259,15 +3259,21 @@ class OpenAIAnalysisService:
     except AppError:
       raise
     except (OpenAIError, BotoCoreError, ClientError) as exc:
-      logger.exception("[aura:ai] text-analysis:failed")
+      logger.warning(
+        "[aura:ai] text-analysis:failed reason=%s",
+        exc.__class__.__name__,
+      )
       raise AppError(
         502,
         "AI_INVOCATION_FAILED",
         "AI text analysis invocation failed.",
-        details={"reason": exc.__class__.__name__, "message": str(exc)},
+        details={"reason": exc.__class__.__name__},
       ) from exc
     except Exception as exc:
-      logger.exception("[aura:ai] text-analysis:failed")
+      logger.warning(
+        "[aura:ai] text-analysis:failed reason=%s",
+        exc.__class__.__name__,
+      )
       raise AppError(
         502,
         "AI_INVOCATION_FAILED",
@@ -3405,15 +3411,21 @@ class OpenAIAnalysisService:
     except AppError:
       raise
     except (OpenAIError, BotoCoreError, ClientError, httpx.HTTPError) as exc:
-      logger.exception("[aura:openai] makeup-recommendation:failed")
+      logger.warning(
+        "[aura:openai] makeup-recommendation:failed reason=%s",
+        exc.__class__.__name__,
+      )
       raise AppError(
         502,
         "OPENAI_MAKEUP_RECOMMENDATION_FAILED",
         "OpenAI makeup recommendation generation failed.",
-        details={"reason": exc.__class__.__name__, "message": str(exc)},
+        details={"reason": exc.__class__.__name__},
       ) from exc
     except Exception as exc:
-      logger.exception("[aura:openai] makeup-recommendation:failed")
+      logger.warning(
+        "[aura:openai] makeup-recommendation:failed reason=%s",
+        exc.__class__.__name__,
+      )
       raise AppError(
         502,
         "OPENAI_MAKEUP_RECOMMENDATION_FAILED",

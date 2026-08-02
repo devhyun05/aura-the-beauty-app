@@ -689,7 +689,7 @@ class ReferenceMakeupBedrockService:
     request_payload = payload.request_payload if isinstance(payload.request_payload, dict) else {}
     bucket, object_key = self._extract_s3_location(request_payload)
     started_at = time.monotonic()
-    logger.info("[aura:reference-bedrock] image-read:start bucket=%s key=%s", bucket, object_key)
+    logger.info("[aura:reference-bedrock] image-read:start source=managed-media")
     image_object = self._s3_client().get_object(Bucket=bucket, Key=object_key)
     image_bytes = image_object["Body"].read()
     logger.info(
@@ -1064,9 +1064,8 @@ async def build_reference_makeup_extraction_payload_for_request(
     return await ReferenceMakeupBedrockService(settings).analyze(payload), "bedrock_completed", None
   except AppError as exc:
     logger.warning(
-      "[aura:reference-bedrock] analyze:app-error code=%s details=%s",
+      "[aura:reference-bedrock] analyze:app-error code=%s",
       exc.code,
-      exc.details,
     )
     if exc.code in REFERENCE_BEDROCK_FATAL_OUTPUT_CODES:
       raise
@@ -1077,17 +1076,19 @@ async def build_reference_makeup_extraction_payload_for_request(
     )
   except (BotoCoreError, ClientError) as exc:
     logger.warning(
-      "[aura:reference-bedrock] analyze:aws-error reason=%s message=%s",
+      "[aura:reference-bedrock] analyze:aws-error reason=%s",
       exc.__class__.__name__,
-      str(exc),
     )
     return (
       build_reference_makeup_extraction_payload(payload),
       "bedrock_failed_fallback",
-      {"code": "BEDROCK_INVOCATION_FAILED", "message": str(exc)},
+      {"code": "BEDROCK_INVOCATION_FAILED", "message": exc.__class__.__name__},
     )
   except Exception as exc:  # noqa: BLE001 - keep the mobile flow alive during prompt iteration.
-    logger.exception("[aura:reference-bedrock] analyze:failed")
+    logger.warning(
+      "[aura:reference-bedrock] analyze:failed reason=%s",
+      exc.__class__.__name__,
+    )
     return (
       build_reference_makeup_extraction_payload(payload),
       "bedrock_failed_fallback",

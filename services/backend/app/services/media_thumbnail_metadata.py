@@ -7,6 +7,8 @@ from typing import Any
 from botocore.exceptions import ClientError
 from PIL import Image, UnidentifiedImageError
 
+from app.services.s3 import media_location_log_token
+
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +109,18 @@ def read_thumbnail_metadata(
     if _is_not_found_error(exc):
       return None
 
-    logger.warning("[aura:media-api] thumbnail:head-failed key=%s", object_key, exc_info=True)
+    logger.warning(
+      "[aura:media-api] thumbnail:head-failed location=%s reason=%s",
+      media_location_log_token(bucket=bucket, object_key=object_key),
+      exc.__class__.__name__,
+    )
     return None
-  except (UnidentifiedImageError, OSError):
-    logger.warning("[aura:media-api] thumbnail:inspect-failed key=%s", object_key, exc_info=True)
+  except (UnidentifiedImageError, OSError) as exc:
+    logger.warning(
+      "[aura:media-api] thumbnail:inspect-failed location=%s reason=%s",
+      media_location_log_token(bucket=bucket, object_key=object_key),
+      exc.__class__.__name__,
+    )
     return None
 
   return ThumbnailMetadata(

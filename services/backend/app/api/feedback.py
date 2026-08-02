@@ -21,12 +21,19 @@ from app.schemas.analysis import (
   FeedbackJobCreateResponse,
 )
 from app.services.ai_job_queue import AIJobQueuePublisher
+from app.services.account_identity import log_identifier_token
 from app.services.makeup_feedback_analysis import (
   MODEL_VERSION,
   build_makeup_feedback_result_for_request,
 )
 from app.services.makeup_journey_observability import (
   build_makeup_feedback_generation_metric,
+)
+from app.services.media_deletion import (
+  MediaObjectRef,
+  enqueue_unreferenced_report_media_deletions,
+  ensure_media_deletion_schema,
+  process_media_deletion_outbox_items,
 )
 from app.services.makeup_feedback_conference import build_makeup_feedback_conference_messages
 from app.services.makeup_feedback_conference_preview import (
@@ -38,6 +45,10 @@ from app.services.makeup_feedback_goal_intent import (
   normalize_feedback_goal_context_for_request,
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
+from app.services.private_media_delivery import (
+  create_owned_media_delivery_urls,
+  project_payload_with_private_media,
+)
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
@@ -94,6 +105,52 @@ def normalize_feedback_report_rows(rows: list[dict]) -> list[dict]:
     for row in rows
     if (normalized := normalize_feedback_report_row(row)) is not None
   ]
+
+
+async def project_feedback_reports_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  reports: list[dict],
+) -> list[dict]:
+  delivery_urls = await create_owned_media_delivery_urls(
+    db,
+    settings,
+    owner_user_id=owner_user_id,
+    media_ids=[report.get("uploaded_media_id") for report in reports],
+  )
+  projected_reports: list[dict] = []
+  for report in reports:
+    projected = dict(report)
+    media_id = projected.get("uploaded_media_id")
+    delivery_url = delivery_urls.get(str(media_id)) if media_id else None
+    projected["feedback_payload"] = project_payload_with_private_media(
+      decode_json_object(projected.get("feedback_payload")),
+      delivery_url=delivery_url,
+    )
+    projected_reports.append(projected)
+  return projected_reports
+
+
+async def project_feedback_report_with_private_media(
+  db: Database,
+  settings: Settings,
+  *,
+  owner_user_id: UUID | str,
+  report: dict | None,
+) -> dict | None:
+  normalized = normalize_feedback_report_row(report)
+  if normalized is None:
+    return None
+  return (
+    await project_feedback_reports_with_private_media(
+      db,
+      settings,
+      owner_user_id=owner_user_id,
+      reports=[normalized],
+    )
+  )[0]
 
 
 async def get_owned_feedback_report(
@@ -471,8 +528,8 @@ async def create_feedback_job(
     per_day=settings.makeup_feedback_generation_limit_per_day,
   )
   logger.info(
-    "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s executionMode=%s",
-    auth.subject,
+    "[aura:feedback-api] job:create-start userToken=%s runImmediately=%s source=%s executionMode=%s",
+    log_identifier_token(auth.subject),
     payload.run_immediately,
     payload.source,
     execution_mode,
@@ -515,7 +572,13 @@ async def create_feedback_job(
       settings,
     )
 
-  return success({"job": normalize_feedback_report_row(report)})
+  projected_report = await project_feedback_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"job": projected_report})
 
 
 @router.post("/conference-preview-messages")
@@ -547,8 +610,8 @@ async def create_feedback_conference_preview_messages(
     settings,
   )
   logger.info(
-    "[aura:feedback-api] conference-preview:completed userSub=%s status=%s count=%s",
-    auth.subject,
+    "[aura:feedback-api] conference-preview:completed userToken=%s status=%s count=%s",
+    log_identifier_token(auth.subject),
     generation_status,
     len(messages),
   )
@@ -595,8 +658,8 @@ async def create_feedback_conference_messages(
     preview_context=payload.preview_context,
   )
   logger.info(
-    "[aura:feedback-api] conference-messages:completed userSub=%s status=%s count=%s",
-    auth.subject,
+    "[aura:feedback-api] conference-messages:completed userToken=%s status=%s count=%s",
+    log_identifier_token(auth.subject),
     generation_status,
     len(messages),
   )
@@ -614,6 +677,7 @@ async def create_feedback_conference_messages(
 async def list_feedback_reports(
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   reports = await db.fetch(
@@ -628,7 +692,13 @@ async def list_feedback_reports(
     user["id"],
   )
 
-  return success({"reports": normalize_feedback_report_rows(reports)})
+  projected_reports = await project_feedback_reports_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    reports=normalize_feedback_report_rows(reports),
+  )
+  return success({"reports": projected_reports})
 
 
 @router.get("/reports/{report_id}")
@@ -636,6 +706,7 @@ async def get_feedback_report(
   report_id: UUID,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
@@ -651,27 +722,111 @@ async def get_feedback_report(
   if not report:
     raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
 
-  return success({"report": normalize_feedback_report_row(report)})
+  projected_report = await project_feedback_report_with_private_media(
+    db,
+    settings,
+    owner_user_id=user["id"],
+    report=report,
+  )
+  return success({"report": projected_report})
 
 
 @router.delete("/reports/{report_id}")
 async def delete_feedback_report(
   report_id: UUID,
+  background_tasks: BackgroundTasks,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
+  await ensure_media_deletion_schema(db)
   user = await ensure_user(db, auth)
-  deleted_report = await db.fetchrow(
-    """
-    delete from makeup_feedback_reports
-    where id = $1 and user_id = $2
-    returning id
-    """,
-    report_id,
-    user["id"],
-  )
+  if db.pool is None:
+    raise AppError(503, "DATABASE_NOT_CONFIGURED", "Database is not connected.")
 
-  if not deleted_report:
-    raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
+  async def delete_and_queue(connection) -> tuple[list[UUID], int]:
+    report = await connection.fetchrow(
+      """
+      select id
+      from makeup_feedback_reports
+      where id = $1 and user_id = $2
+      for update
+      """,
+      report_id,
+      user["id"],
+    )
+    if report is None:
+      raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
 
-  return success({"deleted": True, "reportId": str(report_id)})
+    # Deleting an initial feedback report cascades to its correction reports.
+    # Capture every owned source media reference in that tree before the rows disappear.
+    media_rows = await connection.fetch(
+      """
+      with recursive report_tree as (
+        select id, uploaded_media_id, photo_capture_id
+        from makeup_feedback_reports
+        where id = $1 and user_id = $2
+        union
+        select child.id, child.uploaded_media_id, child.photo_capture_id
+        from makeup_feedback_reports child
+        join report_tree parent on parent.id = child.parent_feedback_report_id
+        where child.user_id = $2
+      )
+      select distinct
+        media.id as media_asset_id,
+        media.bucket,
+        media.object_key
+      from report_tree report
+      left join photo_captures capture on capture.id = report.photo_capture_id
+      cross join lateral (
+        values (report.uploaded_media_id), (capture.media_id)
+      ) as candidate(media_id)
+      join media_assets media on media.id = candidate.media_id
+      where media.owner_user_id = $2
+        and media.deleted_at is null
+        and media.bucket is not null
+        and media.object_key is not null
+      """,
+      report_id,
+      user["id"],
+    )
+
+    await connection.execute(
+      """
+      delete from makeup_feedback_reports
+      where id = $1 and user_id = $2
+      """,
+      report_id,
+      user["id"],
+    )
+
+    refs = [
+      MediaObjectRef(
+        bucket=str(row["bucket"]),
+        object_key=str(row["object_key"]),
+        media_asset_id=row["media_asset_id"],
+      )
+      for row in media_rows
+    ]
+    return await enqueue_unreferenced_report_media_deletions(
+      connection,
+      report_id=report_id,
+      refs=refs,
+      reason="makeup_feedback_report_deleted",
+    )
+
+  outbox_ids, skipped_referenced_count = await db.run_in_transaction(delete_and_queue)
+  if outbox_ids:
+    background_tasks.add_task(
+      process_media_deletion_outbox_items,
+      db,
+      settings,
+      outbox_ids,
+    )
+
+  return success({
+    "deleted": True,
+    "outboxCount": len(outbox_ids),
+    "reportId": str(report_id),
+    "skippedReferencedCount": skipped_referenced_count,
+  })

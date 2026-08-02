@@ -403,7 +403,11 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
     "app.services.makeup_recommendation_image._normalize_source_image",
     lambda _settings, _source: normalized,
   )
-  settings = Settings(openai_api_key="test", s3_bucket_name="private-bucket")
+  settings = Settings(
+    openai_api_key="test",
+    s3_bucket_name="cdn-backed-bucket",
+    private_media_bucket_name="private-bucket",
+  )
   source = PersonalizedImageInput(
     media_id=MEDIA_ID,
     owner_user_id=USER_ID,
@@ -445,6 +449,8 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
   assert "Preserve the exact crop and framing" in calls["edit"]["prompt"]
   assert "do not zoom, reframe, recrop, rotate, or translate" in calls["edit"]["prompt"]
   assert asset.image_url is None
+  assert asset.storage_bucket == "private-bucket"
+  assert uploaded["Bucket"] == "private-bucket"
   assert asset.is_private is True
   assert asset.input_media_id == MEDIA_ID
   assert asset.object_key.startswith("private/generated-makeup-recommendations/")

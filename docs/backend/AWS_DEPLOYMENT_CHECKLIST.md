@@ -167,8 +167,17 @@ cd services/backend
 
 ```env
 S3_BUCKET_NAME=
+PRIVATE_MEDIA_BUCKET_NAME=
 CLOUDFRONT_DOMAIN=
 ```
+
+`PRIVATE_MEDIA_BUCKET_NAME` must name a separate bucket that is not connected
+to the public CloudFront distribution. Configure it using
+[`PRIVATE_MEDIA_SECURITY.md`](./PRIVATE_MEDIA_SECURITY.md) before deploying the
+private upload flow. The preferred path is the repository-managed
+`infra/private-media.yaml` CloudFormation stack; set its
+`PrivateMediaBucketName` output as the GitHub repository variable before the
+ECS deployment runs.
 
 - Upload flow:
 

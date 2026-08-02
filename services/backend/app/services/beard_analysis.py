@@ -282,7 +282,7 @@ class BeardAnalysisBedrockService:
 
     bucket_region = _clean_text(payload.get("bucketRegion")) or None
     started_at = time.monotonic()
-    logger.info("[aura:beard-bedrock] image-read:start bucket=%s key=%s region=%s", bucket, object_key, bucket_region)
+    logger.info("[aura:beard-bedrock] image-read:start source=managed-media region=%s", bucket_region)
     image_object = self._s3_client(bucket_region).get_object(Bucket=bucket, Key=object_key)
     image_bytes = image_object["Body"].read()
     logger.info(
@@ -522,18 +522,20 @@ async def build_beard_analysis_result_for_request(
     raise
   except (BotoCoreError, ClientError) as exc:
     logger.warning(
-      "[aura:beard-bedrock] analyze:aws-error reason=%s message=%s",
+      "[aura:beard-bedrock] analyze:aws-error reason=%s",
       exc.__class__.__name__,
-      str(exc),
     )
     raise AppError(
       502,
       "BEARD_ANALYSIS_UNAVAILABLE",
       "Beard detailed report generation failed.",
-      {"reason": "bedrock_invocation_failed", "message": str(exc)},
+      {"reason": "bedrock_invocation_failed", "providerError": exc.__class__.__name__},
     ) from exc
   except Exception as exc:  # noqa: BLE001 - loud, explicit failure; never a silent fabricated report.
-    logger.exception("[aura:beard-bedrock] analyze:failed")
+    logger.warning(
+      "[aura:beard-bedrock] analyze:failed reason=%s",
+      exc.__class__.__name__,
+    )
     raise AppError(
       502,
       "BEARD_ANALYSIS_UNAVAILABLE",

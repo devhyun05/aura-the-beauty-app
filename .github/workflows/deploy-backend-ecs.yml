@@ -69,6 +69,7 @@ env:
   # 단일 경로를 앵커+5분할 팬아웃으로(서버 ~23s, 피부섹션·앵커프리뷰). vars로 끌 수 있음.
   BEDROCK_ANALYSIS_FANOUT_ENABLED: ${{ vars.BEDROCK_ANALYSIS_FANOUT_ENABLED || 'true' }}
   BACKEND_PUBLIC_BASE_URL: ${{ vars.BACKEND_PUBLIC_BASE_URL || 'https://d3t1pbvtir1lj.cloudfront.net' }}
+  PRIVATE_MEDIA_BUCKET_NAME: ${{ vars.PRIVATE_MEDIA_BUCKET_NAME }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
@@ -231,7 +232,7 @@ jobs:
       - name: Validate deployment configuration
         run: |
           missing=()
-          for name in AWS_REGION ECR_REPOSITORY ECS_CLUSTER ECS_CONTAINER_NAME ECS_SERVICE ECS_TASK_DEFINITION; do
+          for name in AWS_REGION ECR_REPOSITORY ECS_CLUSTER ECS_CONTAINER_NAME ECS_SERVICE ECS_TASK_DEFINITION PRIVATE_MEDIA_BUCKET_NAME; do
             if [ -z "${!name}" ]; then
               missing+=("$name")
             fi
@@ -420,6 +421,7 @@ jobs:
             MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED }}
             FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}
             BEDROCK_ANALYSIS_FANOUT_ENABLED=${{ env.BEDROCK_ANALYSIS_FANOUT_ENABLED }}
+            PRIVATE_MEDIA_BUCKET_NAME=${{ env.PRIVATE_MEDIA_BUCKET_NAME }}
             PRODUCT_EVENT_SIGNING_SECRET=${{ env.PRODUCT_EVENT_SIGNING_SECRET }}
 
       - name: Validate and register ECS task definition
@@ -458,6 +460,7 @@ jobs:
                 "MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED",
                 "FACE_ANALYSIS_V2_ENABLED",
                 "BEDROCK_ANALYSIS_FANOUT_ENABLED",
+                "PRIVATE_MEDIA_BUCKET_NAME",
                 "PRODUCT_EVENT_SIGNING_SECRET"
               ] | index($name) | not))
               | sort_by(.name);
@@ -703,6 +706,62 @@ jobs:
             MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED }}
             FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}
             BEDROCK_ANALYSIS_FANOUT_ENABLED=${{ env.BEDROCK_ANALYSIS_FANOUT_ENABLED }}
+            PRIVATE_MEDIA_BUCKET_NAME=${{ env.PRIVATE_MEDIA_BUCKET_NAME }}
+
+      # Drain and upgrade the consumer before the producer. This avoids a
+      # rollout window where the new API enqueues private-media jobs that an
+      # old worker still handles with the public-bucket contract.
+      - name: Wait for AI job queue to drain
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        run: |
+          queue_url="$(
+            jq -r --arg container "$AI_WORKER_CONTAINER_NAME" '
+              .containerDefinitions[]
+              | select(.name == $container)
+              | (.environment // [])[]
+              | select(.name == "SQS_AI_JOB_QUEUE_URL")
+              | .value
+            ' ai-worker-task-definition.json
+          )"
+
+          if [ -z "$queue_url" ] || [ "$queue_url" = "null" ]; then
+            echo "SQS_AI_JOB_QUEUE_URL was not found in the AI worker task definition." >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            attributes="$(
+              aws sqs get-queue-attributes \
+                --queue-url "$queue_url" \
+                --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+                --output json
+            )"
+            visible="$(jq -r '.Attributes.ApproximateNumberOfMessages // "0"' <<< "$attributes")"
+            in_flight="$(jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible // "0"' <<< "$attributes")"
+
+            if [ "$visible" = "0" ] && [ "$in_flight" = "0" ]; then
+              echo "AI job queue is drained."
+              break
+            fi
+
+            if [ "$attempt" = "60" ]; then
+              echo "AI job queue did not drain within 10 minutes: visible=$visible inFlight=$in_flight" >&2
+              exit 1
+            fi
+
+            echo "Waiting for AI job queue: visible=$visible inFlight=$in_flight"
+            sleep 10
+          done
+
+      - name: Deploy AI worker ECS service
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-ai-worker-task-definition.outputs.task-definition }}
+          service: ${{ env.AI_WORKER_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15
 
       - name: Deploy ECS service
         id: deploy-api
@@ -893,57 +952,6 @@ jobs:
         if: ${{ steps.smoke-api.outcome == 'failure' }}
         run: exit 1
 
-      - name: Wait for AI job queue to drain
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        run: |
-          queue_url="$(
-            jq -r --arg container "$AI_WORKER_CONTAINER_NAME" '
-              .containerDefinitions[]
-              | select(.name == $container)
-              | (.environment // [])[]
-              | select(.name == "SQS_AI_JOB_QUEUE_URL")
-              | .value
-            ' ai-worker-task-definition.json
-          )"
-
-          if [ -z "$queue_url" ] || [ "$queue_url" = "null" ]; then
-            echo "SQS_AI_JOB_QUEUE_URL was not found in the AI worker task definition." >&2
-            exit 1
-          fi
-
-          for attempt in $(seq 1 60); do
-            attributes="$(
-              aws sqs get-queue-attributes \
-                --queue-url "$queue_url" \
-                --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
-                --output json
-            )"
-            visible="$(jq -r '.Attributes.ApproximateNumberOfMessages // "0"' <<< "$attributes")"
-            in_flight="$(jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible // "0"' <<< "$attributes")"
-
-            if [ "$visible" = "0" ] && [ "$in_flight" = "0" ]; then
-              echo "AI job queue is drained."
-              break
-            fi
-
-            if [ "$attempt" = "60" ]; then
-              echo "AI job queue did not drain within 10 minutes: visible=$visible inFlight=$in_flight" >&2
-              exit 1
-            fi
-
-            echo "Waiting for AI job queue: visible=$visible inFlight=$in_flight"
-            sleep 10
-          done
-
-      - name: Deploy AI worker ECS service
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-ai-worker-task-definition.outputs.task-definition }}
-          service: ${{ env.AI_WORKER_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-          wait-max-delay-seconds: 15
       - name: Download current hair worker task definition
         if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         run: |

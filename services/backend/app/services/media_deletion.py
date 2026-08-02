@@ -12,11 +12,14 @@ import asyncpg
 from app.core.settings import Settings
 from app.db.session import Database
 from app.services.s3 import (
+  PRIVATE_USER_MEDIA_OBJECT_PREFIX,
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   S3Service,
   is_makeup_recommendation_object_key,
   is_private_golden_mask_object_key,
   is_private_hair_object_key,
+  is_private_user_media_object_key,
+  media_location_log_token,
 )
 
 
@@ -32,6 +35,7 @@ DELETABLE_REPORT_OBJECT_PREFIXES = (
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   "uploads/photo-captures/",
   "uploads/recommended-makeups/",
+  PRIVATE_USER_MEDIA_OBJECT_PREFIX,
 )
 
 
@@ -86,6 +90,191 @@ async def ensure_media_deletion_schema_connection(
     create index if not exists idx_analysis_reports_user_active_analyzed
       on analysis_reports (user_id, analyzed_at desc)
       where deleted_at is null;
+
+    create or replace function aura_require_active_media_reference()
+    returns trigger
+    language plpgsql
+    as $aura_media_reference$
+    declare
+      media_reference_id uuid;
+    begin
+      media_reference_id := nullif(to_jsonb(new) ->> TG_ARGV[0], '')::uuid;
+      if media_reference_id is null then
+        return new;
+      end if;
+
+      perform 1
+      from media_assets
+      where id = media_reference_id
+        and status = 'active'
+        and deleted_at is null
+      for key share;
+
+      if not found then
+        raise exception 'Referenced media is not active.'
+          using errcode = '23503';
+      end if;
+      return new;
+    end;
+    $aura_media_reference$;
+
+    create or replace function aura_require_active_photo_capture_media()
+    returns trigger
+    language plpgsql
+    as $aura_capture_media_reference$
+    declare
+      capture_reference_id uuid;
+    begin
+      capture_reference_id := nullif(to_jsonb(new) ->> TG_ARGV[0], '')::uuid;
+      if capture_reference_id is null then
+        return new;
+      end if;
+
+      -- A report can consume media indirectly through photo_captures. Lock the
+      -- media row here as well so report attachment and deletion serialize at
+      -- the same active -> deletion_pending boundary as direct media FKs.
+      perform 1
+      from photo_captures capture
+      join media_assets media on media.id = capture.media_id
+      where capture.id = capture_reference_id
+        and media.status = 'active'
+        and media.deleted_at is null
+      for key share of media;
+
+      if not found then
+        raise exception 'Referenced capture media is not active.'
+          using errcode = '23503';
+      end if;
+      return new;
+    end;
+    $aura_capture_media_reference$;
+    """,
+  )
+  await connection.execute(
+    """
+    do $aura_media_triggers$
+    declare
+      target record;
+      trigger_name text;
+      schema_name text := current_schema();
+    begin
+      for target in
+        select *
+        -- media_upload_sessions.media_asset_id is claim bookkeeping rather
+        -- than a consuming reference; it is assigned in the same CTE that
+        -- inserts media_assets and therefore must not use this pre-insert guard.
+        from (values
+          ('users', 'avatar_media_id'),
+          ('photo_captures', 'media_id'),
+          ('analysis_reports', 'source_media_id'),
+          ('analysis_reports', 'preview_media_id'),
+          ('analysis_reports', 'golden_mask_media_id'),
+          ('hair_analyses', 'source_media_id'),
+          ('hair_analyses', 'mask_media_id'),
+          ('hair_simulations', 'result_media_id'),
+          ('saved_makeup_styles', 'source_media_id'),
+          ('saved_makeup_styles', 'thumbnail_media_id'),
+          ('products', 'image_media_id'),
+          ('product_recommendation_runs', 'look_media_id'),
+          ('product_assets', 'media_id'),
+          ('ar_filters', 'preview_media_id'),
+          ('filter_extraction_reports', 'result_media_id'),
+          ('makeup_feedback_reports', 'uploaded_media_id'),
+          ('makeup_recommendation_assets', 'input_media_id'),
+          ('home_hero_banners', 'image_media_id'),
+          ('home_trend_items', 'image_media_id'),
+          ('home_filter_store_items', 'image_media_id'),
+          ('home_recommended_looks', 'image_media_id'),
+          ('community_thread_media', 'media_id'),
+          ('consulting_message_media', 'media_id')
+        ) as references_to_media(table_name, column_name)
+      loop
+        if to_regclass(format('%I.%I', schema_name, target.table_name)) is null
+          or not exists (
+            select 1
+            from information_schema.columns
+            where table_schema = schema_name
+              and table_name = target.table_name
+              and column_name = target.column_name
+          ) then
+          continue;
+        end if;
+
+        trigger_name := 'trg_aura_active_' || substring(
+          md5(target.table_name || ':' || target.column_name),
+          1,
+          16
+        );
+        execute format(
+          'drop trigger if exists %I on %I.%I',
+          trigger_name,
+          schema_name,
+          target.table_name
+        );
+        execute format(
+          'create trigger %I before insert or update of %I on %I.%I '
+          || 'for each row execute function aura_require_active_media_reference(%L)',
+          trigger_name,
+          target.column_name,
+          schema_name,
+          target.table_name,
+          target.column_name
+        );
+      end loop;
+    end;
+    $aura_media_triggers$;
+    """,
+  )
+  await connection.execute(
+    """
+    do $aura_capture_media_triggers$
+    declare
+      target record;
+      trigger_name text;
+      schema_name text := current_schema();
+    begin
+      for target in
+        select *
+        from (values
+          ('analysis_reports', 'photo_capture_id'),
+          ('filter_extraction_reports', 'photo_capture_id'),
+          ('makeup_feedback_reports', 'photo_capture_id')
+        ) as references_to_capture(table_name, column_name)
+      loop
+        if to_regclass(format('%I.%I', schema_name, target.table_name)) is null
+          or not exists (
+            select 1
+            from information_schema.columns
+            where table_schema = schema_name
+              and table_name = target.table_name
+              and column_name = target.column_name
+          ) then
+          continue;
+        end if;
+
+        trigger_name := 'trg_aura_capture_' || substring(
+          md5(target.table_name || ':' || target.column_name),
+          1,
+          16
+        );
+        execute format(
+          'drop trigger if exists %I on %I.%I',
+          trigger_name,
+          schema_name,
+          target.table_name
+        );
+        execute format(
+          'create trigger %I before insert or update of %I on %I.%I '
+          || 'for each row execute function aura_require_active_photo_capture_media(%L)',
+          trigger_name,
+          target.column_name,
+          schema_name,
+          target.table_name,
+          target.column_name
+        );
+      end loop;
+    end;
+    $aura_capture_media_triggers$;
     """,
   )
 
@@ -249,11 +438,28 @@ async def enqueue_unreferenced_report_media_deletions(
   *,
   report_id: UUID,
   refs: Iterable[MediaObjectRef],
+  reason: str = "analysis_report_deleted",
 ) -> tuple[list[UUID], int]:
   outbox_ids: list[UUID] = []
   skipped_referenced_count = 0
 
   for ref in refs:
+    # Lock every live alias of the object.  Combined with the active-reference
+    # trigger installed by ensure_media_deletion_schema_connection(), this
+    # makes the active -> deletion_pending transition the serialization point:
+    # new report rows cannot attach the object after this transaction commits.
+    locked_media_rows = await connection.fetch(
+      """
+      select id
+      from media_assets
+      where bucket = $1
+        and object_key = $2
+        and deleted_at is null
+      for update
+      """,
+      ref.bucket,
+      ref.object_key,
+    )
     if await is_media_object_referenced(
       connection,
       bucket=ref.bucket,
@@ -262,6 +468,21 @@ async def enqueue_unreferenced_report_media_deletions(
     ):
       skipped_referenced_count += 1
       continue
+
+    locked_media_ids = [row["id"] for row in locked_media_rows]
+    if locked_media_ids:
+      await connection.execute(
+        """
+        update media_assets
+        set status = 'deletion_pending',
+            cdn_url = null,
+            thumbnail_cdn_url = null
+        where id = any($1::uuid[])
+          and status = 'active'
+          and deleted_at is null
+        """,
+        locked_media_ids,
+      )
 
     outbox_row = await connection.fetchrow(
       """
@@ -274,7 +495,7 @@ async def enqueue_unreferenced_report_media_deletions(
         status,
         next_attempt_at
       )
-      values ($1, $2, $3, $4, 'analysis_report_deleted', 'pending', now())
+      values ($1, $2, $3, $4, $5, 'pending', now())
       on conflict (report_id, bucket, object_key)
       do update set
         media_asset_id = coalesce(media_deletion_outbox.media_asset_id, excluded.media_asset_id),
@@ -297,6 +518,7 @@ async def enqueue_unreferenced_report_media_deletions(
       ref.media_asset_id,
       ref.bucket,
       ref.object_key,
+      reason,
     )
 
     if outbox_row and outbox_row["status"] != "completed":
@@ -443,12 +665,37 @@ async def is_media_object_referenced(
         where preview_media_id = any($1::uuid[])
         union all
         select 1
+        from hair_analyses
+        where source_media_id = any($1::uuid[])
+          or mask_media_id = any($1::uuid[])
+        union all
+        select 1
+        from hair_simulations
+        where result_media_id = any($1::uuid[])
+        union all
+        select 1
         from filter_extraction_reports
         where result_media_id = any($1::uuid[])
         union all
         select 1
         from makeup_feedback_reports
         where uploaded_media_id = any($1::uuid[])
+        union all
+        select 1
+        from makeup_recommendation_assets
+        where input_media_id = any($1::uuid[])
+        union all
+        select 1
+        from product_assets
+        where media_id = any($1::uuid[])
+        union all
+        select 1
+        from community_thread_media
+        where media_id = any($1::uuid[])
+        union all
+        select 1
+        from consulting_message_media
+        where media_id = any($1::uuid[])
         union all
         select 1
         from home_hero_banners
@@ -655,6 +902,7 @@ async def process_media_deletion_outbox_item(
     permanently_delete = (
       is_private_hair_object_key(object_key)
       or is_private_golden_mask_object_key(object_key)
+      or is_private_user_media_object_key(object_key)
       or is_makeup_recommendation_object_key(object_key, settings)
     )
     delete = s3.delete_object_permanently if permanently_delete else s3.delete_object
@@ -687,13 +935,12 @@ async def process_media_deletion_outbox_item(
         )
   except Exception as exc:  # noqa: BLE001 - persist retry metadata.
     logger.warning(
-      "[aura:media-deletion] s3-delete:failed outboxId=%s bucket=%s objectKey=%s reason=%s",
+      "[aura:media-deletion] s3-delete:failed outboxId=%s location=%s reason=%s",
       outbox_id,
-      bucket,
-      object_key,
+      media_location_log_token(bucket=str(bucket), object_key=str(object_key)),
       exc.__class__.__name__,
     )
-    await mark_media_deletion_outbox_failed(db, outbox_id, str(exc)[:500])
+    await mark_media_deletion_outbox_failed(db, outbox_id, exc.__class__.__name__)
 
 
 async def mark_media_deletion_outbox_blocked(
@@ -705,18 +952,46 @@ async def mark_media_deletion_outbox_blocked(
     return
 
   async with db.pool.acquire() as connection:
-    await connection.execute(
-      """
-      update media_deletion_outbox
-      set status = 'blocked',
-          last_error = $2,
-          next_attempt_at = now() + interval '1 hour',
-          updated_at = now()
-      where id = $1
-      """,
-      outbox_id,
-      reason,
-    )
+    async with connection.transaction():
+      outbox = await connection.fetchrow(
+        """
+        select bucket, object_key
+        from media_deletion_outbox
+        where id = $1
+        for update
+        """,
+        outbox_id,
+      )
+      if outbox is None:
+        return
+
+      # A reference won the race or was discovered after enqueue.  Restore the
+      # delivery eligibility that enqueue revoked before exposing the object
+      # through any owner-scoped read path again.
+      await connection.execute(
+        """
+        update media_assets
+        set status = 'active'
+        where bucket = $1
+          and object_key = $2
+          and status = 'deletion_pending'
+          and deleted_at is null
+        """,
+        outbox["bucket"],
+        outbox["object_key"],
+      )
+      await connection.execute(
+        """
+        update media_deletion_outbox
+        set status = 'blocked',
+            last_error = $2,
+            next_attempt_at = now() + interval '1 hour',
+            updated_at = now()
+        where id = $1
+        """,
+        outbox_id,
+        reason,
+      )
 
 
 async def mark_media_deletion_outbox_failed(

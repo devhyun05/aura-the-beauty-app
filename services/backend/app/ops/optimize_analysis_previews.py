@@ -13,12 +13,13 @@ from PIL import Image, ImageOps
 
 from app.core.settings import Settings, get_settings
 from app.db.connection_config import connect_database
+from app.services.s3 import PRIVATE_USER_MEDIA_OBJECT_PREFIX, S3Service
 
 
 OPTIMIZED_MEDIA_KIND = "analysis-preview"
-OPTIMIZED_PREFIX = "uploads/optimized/analysis-previews"
+OPTIMIZED_PREFIX = f"{PRIVATE_USER_MEDIA_OBJECT_PREFIX}users"
 JPEG_CONTENT_TYPE = "image/jpeg"
-CACHE_CONTROL = "public, max-age=31536000, immutable"
+CACHE_CONTROL = "private, no-store"
 
 
 @dataclass(frozen=True)
@@ -47,13 +48,8 @@ def s3_client(settings: Settings):
   return boto3.client("s3", **kwargs)
 
 
-def cdn_url_for(settings: Settings, object_key: str) -> str | None:
-  cdn_base_url = settings.effective_cdn_base_url
-  return f"{cdn_base_url}/{object_key}" if cdn_base_url else None
-
-
-def object_key_for(source_media_id: str) -> str:
-  return f"{OPTIMIZED_PREFIX}/{source_media_id}.jpg"
+def object_key_for(owner_user_id: str, source_media_id: str) -> str:
+  return f"{OPTIMIZED_PREFIX}/{owner_user_id}/analysis-preview/{source_media_id}.jpg"
 
 
 def optimize_image_bytes(
@@ -133,7 +129,7 @@ async def upsert_optimized_media(
   conn,
   *,
   row: dict[str, Any],
-  settings: Settings,
+  target_bucket: str,
   object_key: str,
   optimized: OptimizedImage,
 ) -> str:
@@ -169,9 +165,9 @@ async def upsert_optimized_media(
     """,
     row["owner_user_id"],
     OPTIMIZED_MEDIA_KIND,
-    row["bucket"],
+    target_bucket,
     object_key,
-    cdn_url_for(settings, object_key),
+    None,
     JPEG_CONTENT_TYPE,
     len(optimized.bytes_data),
     optimized.width,
@@ -185,6 +181,7 @@ async def upsert_optimized_media(
 async def run(args: argparse.Namespace) -> int:
   settings = get_settings()
   client = s3_client(settings)
+  private_bucket = S3Service(settings).private_media_bucket()
   conn, _ = await connect_database()
 
   try:
@@ -201,7 +198,7 @@ async def run(args: argparse.Namespace) -> int:
 
     for index, row in enumerate(rows, 1):
       source_media_id = str(row["source_media_id"])
-      object_key = object_key_for(source_media_id)
+      object_key = object_key_for(str(row["owner_user_id"]), source_media_id)
       original_size = int(row["byte_size"] or 0)
       original_total += original_size
 
@@ -242,15 +239,16 @@ async def run(args: argparse.Namespace) -> int:
 
       client.put_object(
         Body=optimized.bytes_data,
-        Bucket=row["bucket"],
+        Bucket=private_bucket,
         CacheControl=CACHE_CONTROL,
         ContentType=JPEG_CONTENT_TYPE,
         Key=object_key,
+        ServerSideEncryption="AES256",
       )
       optimized_media_id = await upsert_optimized_media(
         conn,
         row=row,
-        settings=settings,
+        target_bucket=private_bucket,
         object_key=object_key,
         optimized=optimized,
       )

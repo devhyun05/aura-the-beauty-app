@@ -198,6 +198,10 @@ class Settings(BaseSettings):
   google_oauth_client_id: str | None = None
 
   s3_bucket_name: str | None = None
+  # Sensitive user imagery is deliberately isolated from the CDN-backed media
+  # bucket. Production must configure this explicitly; only local/test runs may
+  # reuse s3_bucket_name to keep developer fixtures lightweight.
+  private_media_bucket_name: str | None = None
   cdn_base_url: str | None = None
   cloudfront_domain: str | None = None
   openai_api_key: str | None = None
@@ -213,6 +217,9 @@ class Settings(BaseSettings):
   makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
   makeup_private_asset_prefix: str = "private/generated-makeup-recommendations"
   makeup_private_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+  # User-owned report images are returned through short-lived, authenticated
+  # delivery URLs instead of durable CDN locations.
+  private_media_url_ttl_seconds: int = Field(default=300, ge=60, le=900)
 
   push_notifications_enabled: bool = True
   expo_push_endpoint: str = "https://exp.host/--/api/v2/push/send"
@@ -689,6 +696,16 @@ class Settings(BaseSettings):
       "s3BucketName": {
         "configured": bool(self.s3_bucket_name),
         "requiredWhen": "S3 presigned upload APIs are used.",
+      },
+      "privateMediaBucketName": {
+        "configured": bool(
+          self.private_media_bucket_name
+          and self.private_media_bucket_name != self.s3_bucket_name
+        ),
+        "requiredWhen": (
+          "Sensitive face, feedback, or extraction images are uploaded outside local/test. "
+          "The bucket must not be the CDN origin bucket."
+        ),
       },
       "cdnBaseUrl": {
         "configured": bool(self.effective_cdn_base_url),

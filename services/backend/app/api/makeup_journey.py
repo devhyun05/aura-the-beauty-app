@@ -43,6 +43,7 @@ from app.services.makeup_journey_missions import (
   curated_daily_missions,
 )
 from app.services.makeup_feedback_goal_intent import extract_feedback_goal_context
+from app.services.private_media_delivery import create_owned_media_delivery_urls
 from app.services.s3 import S3Service
 from app.services.users import ensure_user
 
@@ -643,6 +644,7 @@ async def get_makeup_journey_day(
     with ranked_reports as (
       select reports.id, reports.score, reports.feedback_kind,
         reports.parent_feedback_report_id, reports.feedback_payload,
+        reports.uploaded_media_id,
         reports.created_at, reports.completed_at,
         notes.content as note_content,
         notes.created_at as note_created_at,
@@ -689,7 +691,7 @@ async def get_makeup_journey_day(
         end as raw_goal_context
       from request_payloads
     )
-    select id, score, feedback_kind, parent_feedback_report_id,
+    select id, score, feedback_kind, parent_feedback_report_id, uploaded_media_id,
       coalesce(
         media_image_url,
         nullif(request_payload ->> 'cdnUrl', ''),
@@ -742,6 +744,21 @@ async def get_makeup_journey_day(
     user["id"],
     resolved_date,
   )
+  report_rows = [dict(report) for report in reports]
+  delivery_urls = await create_owned_media_delivery_urls(
+    db,
+    get_settings(),
+    owner_user_id=user["id"],
+    media_ids=(report.get("uploaded_media_id") for report in report_rows),
+  )
+  for report in report_rows:
+    media_id = report.get("uploaded_media_id")
+    if media_id is not None:
+      # Never fall back to a durable URL embedded in legacy report JSON once
+      # the report references an owned media row.  Missing/deleted media fails
+      # closed while valid media receives a short-lived signed URL.
+      report["image_url"] = delivery_urls.get(str(media_id))
+  reports = report_rows
   missions = await db.fetch(
     """
     select id, source, difficulty, title, is_completed, completed_at,

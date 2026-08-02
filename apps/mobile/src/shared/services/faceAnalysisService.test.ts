@@ -78,6 +78,32 @@ expectEqual(
   'analysis report image source uses explicit cdn base url before api base url',
 );
 
+const privateObjectKeySource = resolveFaceAnalysisReportImageSource({
+  detailPayload: {
+    request: {
+      objectKey: 'private/user-media/users/user-id/capture/media-id.jpg',
+    },
+  },
+});
+
+expectEqual(
+  privateObjectKeySource,
+  undefined,
+  'analysis report image source never reconstructs a public url for private media',
+);
+
+const signedPrivateSource = resolveFaceAnalysisReportImageSource({
+  sourceMedia: {
+    cdnUrl: 'https://private-bucket.s3.amazonaws.com/private/user-media/photo.jpg?X-Amz-Signature=signed',
+  },
+});
+
+expectEqual(
+  (signedPrivateSource as {uri?: string}).uri,
+  'https://private-bucket.s3.amazonaws.com/private/user-media/photo.jpg?X-Amz-Signature=signed',
+  'analysis report image source accepts a backend-issued signed private url',
+);
+
 const completeReportWithoutRecommendedMakeup: BackendAnalysisJob = {
   baseMakeupGuide: '얇고 균일한 베이스',
   faceShape: '계란형',

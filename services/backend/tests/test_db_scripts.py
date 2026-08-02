@@ -380,6 +380,22 @@ def test_media_upload_session_migration_enforces_principal_and_object_binding() 
   assert "idx_media_upload_sessions_pending_expires" in migration_sql
 
 
+def test_private_media_migration_ledger_is_registered_for_resumable_cutover() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:private-media-migration-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+
+  assert "create table if not exists private_media_migration_items" in normalized
+  assert "uq_private_media_migration_resource" in normalized
+  assert "source_state jsonb not null" in normalized
+  assert "cloudfront_invalidation_id" in normalized
+  assert "cleanup_pending" in normalized
+  assert "rollback_pending" in normalized
+  assert "rolled_back" in normalized
+  assert "chk_private_media_migration_completed_state" in normalized
+  assert "idx_private_media_migration_batch_status" in normalized
+  assert "idx_private_media_migration_status_retry" in normalized
+
+
 def test_pending_embedding_migration_is_registered() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:community-embeddings-v1"]
 

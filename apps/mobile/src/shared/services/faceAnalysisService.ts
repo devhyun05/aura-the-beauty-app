@@ -319,7 +319,14 @@ function buildCdnUrlFromObjectKey(objectKey: string | null | undefined): string 
   const normalizedObjectKey = objectKey?.trim().replace(/^\/+/, '');
   const cdnBaseUrl = getBackendCdnBaseUrl();
 
-  if (!normalizedObjectKey || !cdnBaseUrl) {
+  // Private media is delivered only through a fresh backend-issued URL. Never
+  // turn a leaked private/staging key into a public CloudFront URL.
+  if (
+    !normalizedObjectKey ||
+    normalizedObjectKey.startsWith('private/') ||
+    normalizedObjectKey.startsWith('uploads/staging/') ||
+    !cdnBaseUrl
+  ) {
     return undefined;
   }
 

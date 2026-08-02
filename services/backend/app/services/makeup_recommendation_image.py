@@ -31,6 +31,7 @@ from app.services.makeup_feedback_vision import (
 from app.services.makeup_recommendation_semantic import (
   build_semantic_makeup_color_metadata,
 )
+from app.services.s3 import S3Service
 
 
 IMAGE_PROMPT_VERSION = "makeup-image-v2"
@@ -615,8 +616,15 @@ def _generate_asset_sync(
     "output-width": str(validated_output.width),
     "output-height": str(validated_output.height),
   }
+  storage_bucket = (
+    S3Service(settings).private_media_bucket()
+    if is_private
+    else settings.s3_bucket_name
+  )
+  if not storage_bucket:
+    raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for recommendation images.")
   put_args: dict[str, Any] = {
-    "Bucket": settings.s3_bucket_name,
+    "Bucket": storage_bucket,
     "Key": object_key,
     "Body": image_bytes,
     "ContentType": content_type,
@@ -646,7 +654,7 @@ def _generate_asset_sync(
     )
   return GeneratedRecommendationAsset(
     image_url=image_url,
-    storage_bucket=settings.s3_bucket_name,
+    storage_bucket=storage_bucket,
     object_key=object_key,
     content_type=content_type,
     is_private=is_private,

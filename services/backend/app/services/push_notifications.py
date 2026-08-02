@@ -12,6 +12,7 @@ import httpx
 
 from app.core.settings import Settings
 from app.db.session import Database
+from app.services.account_identity import log_identifier_token
 from app.services.notification_realtime import publish_notification_created
 
 
@@ -356,8 +357,8 @@ async def retry_recent_notifications_for_user(
       await _deliver_notification(db, settings, row["notification_id"])
   except Exception:  # noqa: BLE001 - registration must remain successful.
     logger.warning(
-      "[aura:notifications] recent-push-retry-failed userId=%s",
-      user_id,
+      "[aura:notifications] recent-push-retry-failed userToken=%s",
+      log_identifier_token(user_id),
       exc_info=True,
     )
 
@@ -381,9 +382,9 @@ async def create_and_send_notification(
 
   if notification_type not in REPORT_NOTIFICATION_TYPES:
     logger.info(
-      "[aura:notifications] unsupported-type-skipped type=%s userId=%s",
+      "[aura:notifications] unsupported-type-skipped type=%s userToken=%s",
       notification_type,
-      user_id,
+      log_identifier_token(user_id),
     )
     return
 
@@ -396,10 +397,10 @@ async def create_and_send_notification(
       report_id=report_id,
     ):
       logger.info(
-        "[aura:notifications] viewed-report-skipped type=%s userId=%s reportId=%s",
+        "[aura:notifications] viewed-report-skipped type=%s userToken=%s reportToken=%s",
         notification_type,
-        user_id,
-        report_id,
+        log_identifier_token(user_id),
+        log_identifier_token(report_id),
       )
       return
 
@@ -475,9 +476,9 @@ async def create_and_send_notification(
     await _deliver_notification(db, settings, notification["id"])
   except Exception:  # noqa: BLE001 - notification delivery is fail-open.
     logger.warning(
-      "[aura:notifications] create-or-send-failed type=%s userId=%s dedupeKey=%s",
+      "[aura:notifications] create-or-send-failed type=%s userToken=%s dedupeToken=%s",
       notification_type,
-      user_id,
-      dedupe_key,
+      log_identifier_token(user_id),
+      log_identifier_token(dedupe_key),
       exc_info=True,
     )

@@ -66,6 +66,7 @@ type PresignedUpload = {
   cdnUrl?: string | null;
   contentType: string;
   expiresIn: number;
+  headers?: Record<string, string> | null;
   method: 'PUT';
   objectKey: string;
   uploadId?: string | null;
@@ -258,10 +259,15 @@ async function uploadImageObjectOnce({
     const s3StartedAt = Date.now();
     console.info('[aura:capture-upload] s3-put:start');
     const uploadResult = await FileSystem.uploadAsync(upload.uploadUrl, uploadFile.fileUri, {
-      headers: {
-        ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
-        'Content-Type': contentType,
-      },
+      // Presigned PUT headers are part of the S3 signature. Replay the server-provided
+      // values exactly (including encryption requirements) when they are present.
+      headers:
+        upload.headers && Object.keys(upload.headers).length > 0
+          ? upload.headers
+          : {
+              ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
+              'Content-Type': contentType,
+            },
       httpMethod: upload.method,
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
     });

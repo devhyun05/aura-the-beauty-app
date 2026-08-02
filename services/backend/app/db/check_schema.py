@@ -18,6 +18,7 @@ EXPECTED_TABLES = {
   "users",
   "media_assets",
   "media_upload_sessions",
+  "private_media_migration_items",
   "photo_captures",
   "analysis_reports",
   "analysis_stage_runs",
@@ -107,6 +108,18 @@ EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 
 EXPECTED_CONSTRAINTS = {
   "media_assets": {"chk_media_assets_golden_mask_private"},
+  "private_media_migration_items": {
+    "uq_private_media_migration_resource",
+    "uq_private_media_migration_target",
+    "chk_private_media_migration_resource_type",
+    "chk_private_media_migration_status",
+    "chk_private_media_migration_attempts",
+    "chk_private_media_migration_target_pair",
+    "chk_private_media_migration_checksum_format",
+    "chk_private_media_migration_copied_state",
+    "chk_private_media_migration_completed_state",
+    "chk_private_media_migration_source_state",
+  },
   "analysis_reports": {
     "fk_analysis_reports_golden_mask_media",
     "chk_analysis_reports_golden_mask_metadata",
@@ -253,6 +266,30 @@ EXPECTED_COLUMNS = {
     "idempotency_expires_at",
   },
   "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+  "private_media_migration_items": {
+    "batch_id",
+    "resource_type",
+    "resource_id",
+    "owner_user_id",
+    "media_kind",
+    "source_bucket",
+    "source_object_key",
+    "source_cdn_url",
+    "source_state",
+    "target_bucket",
+    "target_object_key",
+    "source_checksum_sha256",
+    "source_etag",
+    "source_version_id",
+    "target_checksum_sha256",
+    "status",
+    "attempts",
+    "last_error",
+    "cloudfront_distribution_id",
+    "cloudfront_invalidation_id",
+    "cloudfront_path_manifest_sha256",
+    "cloudfront_invalidated_at",
+  },
   # A5 (schema.sql:auradin-events-v1) — §7.2 이벤트 스키마 정본
   "auradin_events": {
     "client_event_id",
@@ -791,6 +828,16 @@ EXPECTED_ENUM_VALUES = {
 }
 
 EXPECTED_INDEX_CONTRACTS = {
+  "idx_private_media_migration_batch_status": (
+    "batch_id",
+    "status",
+    "created_at",
+  ),
+  "idx_private_media_migration_status_retry": (
+    "status",
+    "updated_at",
+    "where",
+  ),
   "idx_analysis_reports_golden_mask_media": (
     "golden_mask_media_id",
     "where (golden_mask_media_id is not null)",

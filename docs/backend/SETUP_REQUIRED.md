@@ -107,6 +107,14 @@ Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS 
 - Connected code/env name: `S3_BUCKET_NAME`
 - Current behavior when missing: `/api/media/presigned-upload` returns `S3_NOT_CONFIGURED`.
 
+- Name: `PRIVATE_MEDIA_BUCKET_NAME`
+- Why it is needed: Keep face, feedback, and extraction source images outside the public CloudFront origin and deliver them only through short-lived authenticated URLs.
+- Where to get it: Create a separate private S3 bucket with Block Public Access enabled; do not attach it as a CloudFront origin.
+- Example format: `aura-private-user-media-dev`
+- Connected code/env name: `PRIVATE_MEDIA_BUCKET_NAME`
+- Current behavior when missing: sensitive uploads fail closed outside local/test with `PRIVATE_MEDIA_BUCKET_NOT_CONFIGURED`. Reusing `S3_BUCKET_NAME` outside local/test fails with `PRIVATE_MEDIA_BUCKET_NOT_ISOLATED`.
+- Deployment details: follow `docs/backend/PRIVATE_MEDIA_SECURITY.md` before enabling the new upload flow.
+
 - Name: `CLOUDFRONT_DOMAIN` or `CDN_BASE_URL`
 - Why it is needed: Convert uploaded S3 object keys into CDN URLs.
 - Where to get it: CloudFront distribution domain or custom domain.

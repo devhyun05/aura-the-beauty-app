@@ -8,6 +8,8 @@ from urllib.parse import unquote_plus
 import boto3
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from app.services.s3 import media_location_log_token
+
 try:
   from pillow_heif import register_heif_opener
 
@@ -231,23 +233,28 @@ def process_image_bytes(image_bytes: bytes) -> ProcessedImage:
 
 def process_s3_object(s3_client: Any, ref: S3ObjectRef) -> MediaPostprocessResult | None:
   if not should_process_object_key(ref.object_key):
-    logger.info("[aura:media-lambda] object:skip-key bucket=%s key=%s", ref.bucket, ref.object_key)
+    logger.info(
+      "[aura:media-lambda] object:skip-key location=%s",
+      media_location_log_token(bucket=ref.bucket, object_key=ref.object_key),
+    )
     return None
 
   response = s3_client.get_object(Bucket=ref.bucket, Key=ref.object_key)
   metadata = response.get("Metadata") or {}
 
   if metadata.get(AURA_POSTPROCESSED_METADATA_KEY) == "true":
-    logger.info("[aura:media-lambda] object:skip-processed bucket=%s key=%s", ref.bucket, ref.object_key)
+    logger.info(
+      "[aura:media-lambda] object:skip-processed location=%s",
+      media_location_log_token(bucket=ref.bucket, object_key=ref.object_key),
+    )
     return None
 
   content_type = (response.get("ContentType") or "").lower()
 
   if content_type and content_type not in SUPPORTED_CONTENT_TYPES:
     logger.info(
-      "[aura:media-lambda] object:skip-content-type bucket=%s key=%s contentType=%s",
-      ref.bucket,
-      ref.object_key,
+      "[aura:media-lambda] object:skip-content-type location=%s contentType=%s",
+      media_location_log_token(bucket=ref.bucket, object_key=ref.object_key),
       content_type,
     )
     return None

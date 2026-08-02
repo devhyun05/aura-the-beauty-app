@@ -56,6 +56,7 @@ const requiredNativeUploadFragments = [
   'FileSystem.EncodingType.Base64',
   'FileSystem.uploadAsync',
   'FileSystem.FileSystemUploadType.BINARY_CONTENT',
+  'upload.headers && Object.keys(upload.headers).length > 0',
 ];
 
 for (const fragment of requiredNativeUploadFragments) {

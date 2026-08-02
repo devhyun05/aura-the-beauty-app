@@ -2870,7 +2870,7 @@ class MakeupFeedbackBedrockService:
       raise AppError(400, "FEEDBACK_SOURCE_IMAGE_REQUIRED", "A feedback source image must be uploaded before analysis.")
 
     started_at = time.monotonic()
-    logger.info("[aura:feedback-bedrock] image-read:start bucket=%s key=%s", bucket, object_key)
+    logger.info("[aura:feedback-bedrock] image-read:start source=managed-media")
     image_object = self._s3_client().get_object(Bucket=bucket, Key=object_key)
     image_bytes = image_object["Body"].read()
     logger.info(
@@ -3291,10 +3291,10 @@ async def build_makeup_feedback_result_for_request(
     result = await service.analyze(payload)
     return result, service.analysis_status, None
   except AppError as exc:
-    logger.warning("[aura:feedback-bedrock] analyze:app-error code=%s details=%s", exc.code, exc.details)
+    logger.warning("[aura:feedback-bedrock] analyze:app-error code=%s", exc.code)
     raise
   except (BotoCoreError, ClientError) as exc:
-    logger.warning("[aura:feedback-bedrock] analyze:aws-error reason=%s message=%s", exc.__class__.__name__, str(exc))
+    logger.warning("[aura:feedback-bedrock] analyze:aws-error reason=%s", exc.__class__.__name__)
     raise AppError(
       502,
       "FEEDBACK_BEDROCK_INVOCATION_FAILED",
@@ -3302,7 +3302,10 @@ async def build_makeup_feedback_result_for_request(
       {"reason": exc.__class__.__name__},
     ) from exc
   except Exception as exc:  # noqa: BLE001 - convert unexpected worker errors into a stable failure payload.
-    logger.exception("[aura:feedback-bedrock] analyze:failed")
+    logger.warning(
+      "[aura:feedback-bedrock] analyze:failed reason=%s",
+      exc.__class__.__name__,
+    )
     raise AppError(
       502,
       "FEEDBACK_BEDROCK_FAILED",

@@ -45,13 +45,13 @@ def test_s3_presigned_upload_uses_cdn_url_and_file_extension() -> None:
   )
 
   upload = FakeS3Service(settings).create_presigned_upload(
-    media_kind="capture",
+    media_kind="profile-avatar",
     content_type="image/jpeg",
     original_filename="face.jpg.html",
   )
 
   assert upload["bucket"] == "aura-dev-bucket"
-  assert upload["object_key"].startswith("uploads/capture/")
+  assert upload["object_key"].startswith("uploads/profile-avatar/")
   assert upload["object_key"].endswith(".jpg")
   assert upload["cdn_url"] == f"https://cdn.example.com/{upload['object_key']}"
   assert upload["cache_control"] == "public, max-age=31536000, immutable"
@@ -60,7 +60,7 @@ def test_s3_presigned_upload_uses_cdn_url_and_file_extension() -> None:
 
 def test_s3_presigned_upload_requires_bucket() -> None:
   with pytest.raises(AppError) as exc_info:
-    S3Service(Settings()).create_presigned_upload("capture", "image/jpeg", None)
+    S3Service(Settings()).create_presigned_upload("community-thread", "image/jpeg", None)
 
   assert exc_info.value.code == "S3_NOT_CONFIGURED"
 

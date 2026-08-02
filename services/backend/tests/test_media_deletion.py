@@ -61,6 +61,12 @@ def test_legacy_face_analysis_source_is_report_owned_object() -> None:
   ) is True
 
 
+def test_private_user_media_is_report_owned_object() -> None:
+  assert media_deletion_service.is_report_owned_object_key(
+    "private/user-media/users/user-id/capture/media-id.jpg",
+  ) is True
+
+
 def test_makeup_recommendation_objects_are_managed_s3_targets() -> None:
   settings = Settings(
     s3_bucket_name="aura-media",
@@ -79,6 +85,175 @@ def test_makeup_recommendation_objects_are_managed_s3_targets() -> None:
     service.assert_managed_media_location(bucket="other-bucket", object_key=private_key)
   with pytest.raises(AppError):
     service.assert_managed_media_location(bucket="aura-media", object_key="private/unmanaged/look.webp")
+
+
+@pytest.mark.asyncio
+async def test_schema_installs_active_media_reference_guards() -> None:
+  statements: list[str] = []
+
+  class Connection:
+    async def execute(self, query: str, *_args):
+      statements.append(" ".join(query.split()).lower())
+      return "OK"
+
+  await media_deletion_service.ensure_media_deletion_schema_connection(Connection())
+
+  combined = " ".join(statements)
+  assert "create or replace function aura_require_active_media_reference" in combined
+  assert "create or replace function aura_require_active_photo_capture_media" in combined
+  assert "status = 'active'" in combined
+  assert "for key share" in combined
+  assert "for key share of media" in combined
+  for reference in (
+    "('analysis_reports', 'source_media_id')",
+    "('hair_analyses', 'mask_media_id')",
+    "('makeup_recommendation_assets', 'input_media_id')",
+    "('community_thread_media', 'media_id')",
+    "('consulting_message_media', 'media_id')",
+  ):
+    assert reference in combined
+  for capture_reference in (
+    "('analysis_reports', 'photo_capture_id')",
+    "('filter_extraction_reports', 'photo_capture_id')",
+    "('makeup_feedback_reports', 'photo_capture_id')",
+  ):
+    assert capture_reference in combined
+
+
+@pytest.mark.asyncio
+async def test_enqueue_transitions_media_to_deletion_pending_before_outbox(monkeypatch) -> None:
+  report_id = uuid4()
+  media_id = uuid4()
+  outbox_id = uuid4()
+  events: list[str] = []
+
+  async def unreferenced(*_args, **_kwargs):
+    events.append("reference-check")
+    return False
+
+  monkeypatch.setattr(media_deletion_service, "is_media_object_referenced", unreferenced)
+
+  class Connection:
+    async def fetch(self, query: str, *_args):
+      assert "for update" in query.lower()
+      events.append("media-lock")
+      return [{"id": media_id}]
+
+    async def execute(self, query: str, *_args):
+      normalized = " ".join(query.split()).lower()
+      assert "set status = 'deletion_pending'" in normalized
+      events.append("media-pending")
+      return "UPDATE 1"
+
+    async def fetchrow(self, query: str, *_args):
+      assert "insert into media_deletion_outbox" in query.lower()
+      events.append("outbox-insert")
+      return {"id": outbox_id, "status": "pending"}
+
+  ids, skipped = await media_deletion_service.enqueue_unreferenced_report_media_deletions(
+    Connection(),
+    report_id=report_id,
+    refs=[
+      media_deletion_service.MediaObjectRef(
+        bucket="private-media",
+        object_key="private/user-media/users/token/capture/file.jpg",
+        media_asset_id=media_id,
+      ),
+    ],
+  )
+
+  assert ids == [outbox_id]
+  assert skipped == 0
+  assert events == ["media-lock", "reference-check", "media-pending", "outbox-insert"]
+
+
+@pytest.mark.asyncio
+async def test_reference_check_covers_every_media_fk_family() -> None:
+  media_id = uuid4()
+  checked_queries: list[str] = []
+
+  class Connection:
+    async def fetch(self, _query: str, *_args):
+      return [{"id": media_id}]
+
+    async def fetchval(self, query: str, *_args):
+      checked_queries.append(" ".join(query.split()).lower())
+      return False
+
+  assert await media_deletion_service.is_media_object_referenced(
+    Connection(),
+    bucket="private-media",
+    object_key="private/user-media/users/token/capture/file.jpg",
+  ) is False
+
+  media_query = checked_queries[0]
+  for table in (
+    "users",
+    "analysis_reports",
+    "hair_analyses",
+    "hair_simulations",
+    "saved_makeup_styles",
+    "products",
+    "product_recommendation_runs",
+    "product_assets",
+    "ar_filters",
+    "filter_extraction_reports",
+    "makeup_feedback_reports",
+    "makeup_recommendation_assets",
+    "home_hero_banners",
+    "home_trend_items",
+    "home_filter_store_items",
+    "home_recommended_looks",
+    "community_thread_media",
+    "consulting_message_media",
+    "photo_captures",
+  ):
+    assert f"from {table}" in media_query
+
+
+@pytest.mark.asyncio
+async def test_blocked_deletion_restores_delivery_eligibility() -> None:
+  outbox_id = uuid4()
+  executed: list[tuple[str, tuple]] = []
+
+  class AsyncContext:
+    async def __aenter__(self):
+      return self
+
+    async def __aexit__(self, _exc_type, _exc, _traceback):
+      return False
+
+  class Connection(AsyncContext):
+    def transaction(self):
+      return AsyncContext()
+
+    async def fetchrow(self, query: str, *args):
+      assert "for update" in query.lower()
+      assert args == (outbox_id,)
+      return {"bucket": "private-media", "object_key": "private/user-media/file.jpg"}
+
+    async def execute(self, query: str, *args):
+      executed.append((" ".join(query.split()).lower(), args))
+      return "UPDATE 1"
+
+  connection = Connection()
+
+  class Pool:
+    def acquire(self):
+      return connection
+
+  class Database:
+    pool = Pool()
+
+  await media_deletion_service.mark_media_deletion_outbox_blocked(
+    Database(),
+    outbox_id,
+    "MEDIA_OBJECT_STILL_REFERENCED",
+  )
+
+  assert "set status = 'active'" in executed[0][0]
+  assert executed[0][1] == ("private-media", "private/user-media/file.jpg")
+  assert "set status = 'blocked'" in executed[1][0]
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.beard import BeardJobCreate, BeardUploadUrlRequest
 from app.schemas.beard_report import BeardAnalysisRequest
+from app.services.account_identity import log_identifier_token
 from app.services.beard_analysis import build_beard_analysis_result_for_request
 from app.services.beard_lambda import BeardLambdaClient
 from app.services.users import ensure_user
@@ -297,6 +298,9 @@ async def create_beard_report(
   }
 
   analysis = await build_beard_analysis_result_for_request(request_payload, settings)
-  logger.info("[aura:beard-api] report:completed userSub=%s", auth.subject)
+  logger.info(
+    "[aura:beard-api] report:completed userToken=%s",
+    log_identifier_token(auth.subject),
+  )
 
   return success({"analysis": analysis, "analysisStatus": "completed"})

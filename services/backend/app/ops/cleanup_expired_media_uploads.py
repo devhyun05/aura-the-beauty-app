@@ -264,7 +264,10 @@ async def cleanup_expired_media_uploads(
         media_id,
       )
 
-  if outbox_ids:
+  # Also drain due finalization guards created before private objects are put.
+  # Those guards may be the only outstanding outbox work after a process crash,
+  # so cleanup must not depend on finding a Golden Mask candidate in this run.
+  if getattr(db, "pool", None) is not None:
     await process_media_deletion_outbox_items(
       db,
       settings or get_settings(),

@@ -191,6 +191,94 @@ create table if not exists media_upload_sessions (
 
 comment on table media_upload_sessions is 'Server-issued, principal-bound S3 upload locations consumed exactly once.';
 
+create table if not exists private_media_migration_items (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null,
+  resource_type text not null,
+  resource_id uuid not null,
+  owner_user_id uuid not null,
+  media_kind text not null,
+  source_bucket text not null,
+  source_object_key text not null,
+  source_cdn_url text,
+  source_state jsonb not null default '{}'::jsonb,
+  target_bucket text,
+  target_object_key text,
+  source_checksum_sha256 text,
+  source_etag text,
+  source_version_id text,
+  target_checksum_sha256 text,
+  status text not null default 'planned',
+  attempts integer not null default 0,
+  last_error text,
+  cloudfront_distribution_id text,
+  cloudfront_invalidation_id text,
+  cloudfront_path_manifest_sha256 text,
+  cloudfront_invalidated_at timestamptz,
+  copied_at timestamptz,
+  switched_at timestamptz,
+  verified_at timestamptz,
+  cleaned_at timestamptz,
+  rolled_back_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_private_media_migration_resource unique (resource_type, resource_id),
+  constraint uq_private_media_migration_target unique (target_bucket, target_object_key),
+  constraint chk_private_media_migration_resource_type check (
+    resource_type in ('media_asset', 'makeup_recommendation_asset')
+  ),
+  constraint chk_private_media_migration_status check (
+    status in (
+      'planned', 'copied', 'switched', 'verified', 'cleanup_pending',
+      'completed', 'failed', 'rollback_pending', 'rolled_back'
+    )
+  ),
+  constraint chk_private_media_migration_attempts check (attempts >= 0),
+  constraint chk_private_media_migration_target_pair check (
+    (target_bucket is null) = (target_object_key is null)
+  ),
+  constraint chk_private_media_migration_checksum_format check (
+    (source_checksum_sha256 is null or source_checksum_sha256 ~ '^[0-9a-f]{64}$')
+    and (target_checksum_sha256 is null or target_checksum_sha256 ~ '^[0-9a-f]{64}$')
+    and (cloudfront_path_manifest_sha256 is null or cloudfront_path_manifest_sha256 ~ '^[0-9a-f]{64}$')
+  ),
+  constraint chk_private_media_migration_copied_state check (
+    status not in ('copied', 'switched', 'verified', 'cleanup_pending', 'completed')
+    or (
+      target_bucket is not null
+      and target_object_key is not null
+      and source_checksum_sha256 is not null
+      and target_checksum_sha256 is not null
+      and copied_at is not null
+    )
+  ),
+  constraint chk_private_media_migration_completed_state check (
+    status <> 'completed'
+    or (
+      cloudfront_distribution_id is not null
+      and cloudfront_invalidation_id is not null
+      and cloudfront_path_manifest_sha256 is not null
+      and cloudfront_invalidated_at is not null
+      and cleaned_at is not null
+    )
+  ),
+  constraint chk_private_media_migration_source_state check (
+    jsonb_typeof(source_state) = 'object'
+  )
+);
+
+comment on table private_media_migration_items is
+  'Resumable audit ledger for moving legacy user-face media from CDN-backed storage to private S3.';
+
+create index if not exists idx_private_media_migration_batch_status
+  on private_media_migration_items (batch_id, status, created_at);
+
+create index if not exists idx_private_media_migration_status_retry
+  on private_media_migration_items (status, updated_at)
+  where status in (
+    'planned', 'copied', 'switched', 'verified', 'cleanup_pending', 'failed', 'rollback_pending'
+  );
+
 create table if not exists photo_captures (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,

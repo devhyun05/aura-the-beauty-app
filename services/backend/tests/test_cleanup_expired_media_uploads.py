@@ -2,6 +2,8 @@ from typing import Any
 
 import pytest
 
+from app.core.settings import Settings
+from app.ops import cleanup_expired_media_uploads as cleanup_module
 from app.ops.cleanup_expired_media_uploads import (
   cleanup_expired_media_uploads,
   find_expired_media_uploads,
@@ -98,3 +100,25 @@ async def test_cleanup_leaves_failed_upload_pending_for_next_retry() -> None:
   assert result.failed_upload_ids == ("upload-1",)
   assert result.has_failures is True
   assert db.update_calls == []
+
+
+@pytest.mark.asyncio
+async def test_cleanup_drains_due_deletion_guards_without_other_candidates(monkeypatch) -> None:
+  db = FakeDB([])
+  db.pool = object()
+  calls: list[list] = []
+
+  async def drain(db_arg, settings_arg, outbox_ids):
+    assert db_arg is db
+    assert isinstance(settings_arg, Settings)
+    calls.append(list(outbox_ids))
+
+  monkeypatch.setattr(cleanup_module, "process_media_deletion_outbox_items", drain)
+
+  await cleanup_module.cleanup_expired_media_uploads(
+    db,
+    s3=FakeS3(),
+    settings=Settings(s3_bucket_name="private-media"),
+  )
+
+  assert calls == [[]]
