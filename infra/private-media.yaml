@@ -211,7 +211,7 @@ Resources:
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/filter-extraction-thumbnail/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback-thumbnail/*
-              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/analysis-preview/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/optimized/analysis-previews/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*
           - Sid: InspectExactLegacyMediaVersions
             Effect: Allow
@@ -230,7 +230,7 @@ Resources:
                   - uploads/filter-extraction-thumbnail/*
                   - uploads/makeup_feedback/*
                   - uploads/makeup_feedback-thumbnail/*
-                  - uploads/analysis-preview/*
+                  - uploads/optimized/analysis-previews/*
                   - !Sub ${MakeupPrivateAssetPrefix}/*
           - Sid: VerifyLegacyCloudFrontInvalidations
             Effect: Allow

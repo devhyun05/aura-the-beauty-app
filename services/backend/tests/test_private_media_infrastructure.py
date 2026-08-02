@@ -81,7 +81,9 @@ def test_legacy_migration_permissions_are_temporary_and_scoped() -> None:
   assert "cloudfront:GetInvalidation" in template
   assert "cloudfront:CreateInvalidation" not in template
   assert "${LegacyPublicMediaBucketName}/uploads/face-analysis-source/*" in template
+  assert "${LegacyPublicMediaBucketName}/uploads/optimized/analysis-previews/*" in template
   assert "${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*" in template
+  assert "${LegacyPublicMediaBucketName}/uploads/analysis-preview/*" not in template
 
 
 def test_private_media_stack_output_is_wired_into_backend_deployment() -> None:
