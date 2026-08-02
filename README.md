@@ -59,6 +59,10 @@ AURA는 얼굴 사진과 지원 기기의 3D 얼굴 데이터를 해석해, 사�
 - **해결:** 공통 분석 뒤의 독립 생성 작업을 병렬 실행하고, 먼저 완성된 앵커와 결과부터 저장·표시하도록 구성했습니다.
 - **결과:** 동일 사진·실제 Bedrock 경로 측정에서 서버 처리 시간을 23.5초로 줄이고 빈 화면 대기를 줄였습니다.
 
+![AI 리포트 병렬 생성과 메이크업 채점 검증 보드](./docs/readme/aura-experiment-llm-pipeline.webp)
+
+<sub>얼굴 원본을 포함하지 않은 설계·검증 자료입니다. 보드의 42→24초는 목표치이며, 위 42.6→23.5초는 동일 조건 실측치입니다.</sub>
+
 ### 2. 고정된 얼굴 부위 안에서 3D 특징점 선택
 
 - **문제:** 넓은 2D 화면 구간에서 후보점을 다시 찾으면 촬영 자세에 따라 같은 지표가 다른 얼굴 부위를 선택했습니다.
@@ -143,5 +147,6 @@ python -m pytest -q
 ## 고지
 
 - 분석 결과는 스타일링을 돕는 참고 정보이며 의료 진단이 아닙니다.
+- 식별 가능한 사용자·팀원 실험 사진은 README에서 제외했습니다. 기능 화면의 인물 목업은 [자산 고지](./apps/mobile/src/assets/images/ASSET_LICENSES.md)를 따릅니다.
 - 비밀 값과 앱에서 수집한 사용자 업로드·운영 데이터는 커밋하지 않습니다.
 - 이 저장소는 비공개 팀 프로젝트이며 별도의 오픈소스 라이선스를 제공하지 않습니다. 외부 고지는 [Mobile](./apps/mobile/THIRD_PARTY_NOTICES.md), [Backend](./services/backend/THIRD_PARTY_NOTICES.md), [Assets](./apps/mobile/src/assets/images/ASSET_LICENSES.md)를 따릅니다.
