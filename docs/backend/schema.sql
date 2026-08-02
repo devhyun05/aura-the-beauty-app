@@ -225,6 +225,8 @@ create table if not exists private_media_migration_items (
   switched_at timestamptz,
   verified_at timestamptz,
   cleaned_at timestamptz,
+  discard_pending_at timestamptz,
+  discarded_at timestamptz,
   rolled_back_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -236,7 +238,8 @@ create table if not exists private_media_migration_items (
   constraint chk_private_media_migration_status check (
     status in (
       'planned', 'copied', 'switched', 'verified', 'cleanup_pending',
-      'completed', 'failed', 'rollback_pending', 'rolled_back'
+      'completed', 'failed', 'discard_pending', 'discarded',
+      'rollback_pending', 'rolled_back'
     )
   ),
   constraint chk_private_media_migration_attempts check (attempts >= 0),
@@ -268,6 +271,19 @@ create table if not exists private_media_migration_items (
       and cleaned_at is not null
     )
   ),
+  constraint chk_private_media_migration_discarded_state check (
+    status not in ('discard_pending', 'discarded')
+    or (
+      resource_type = 'media_asset'
+      and source_checksum_sha256 = '32461d5bd1773012acef0ba15636752949bd7c2ce50f9172159d9f56cf0dd9af'
+      and cloudfront_distribution_id is not null
+      and cloudfront_invalidation_id is not null
+      and cloudfront_path_manifest_sha256 is not null
+      and cloudfront_invalidated_at is not null
+      and discard_pending_at is not null
+      and (status <> 'discarded' or discarded_at is not null)
+    )
+  ),
   constraint chk_private_media_migration_source_state check (
     jsonb_typeof(source_state) = 'object'
   )
@@ -282,7 +298,8 @@ create index if not exists idx_private_media_migration_batch_status
 create index if not exists idx_private_media_migration_status_retry
   on private_media_migration_items (status, updated_at)
   where status in (
-    'planned', 'copied', 'switched', 'verified', 'cleanup_pending', 'failed', 'rollback_pending'
+    'planned', 'copied', 'switched', 'verified', 'cleanup_pending',
+    'failed', 'discard_pending', 'rollback_pending'
   );
 
 create table if not exists photo_captures (

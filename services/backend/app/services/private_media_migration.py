@@ -48,6 +48,8 @@ ROLLBACK_STATUSES = frozenset(
 HAIR_MASK_MEDIA_KIND = "hair-analysis-mask"
 GOLDEN_MASK_MAGIC = b"AUGM"
 GOLDEN_MASK_FORMAT_VERSION = 1
+EMPTY_JPEG_BYTES = b"\xff\xd8\xff\xd9"
+EMPTY_JPEG_SHA256 = hashlib.sha256(EMPTY_JPEG_BYTES).hexdigest()
 
 
 class MigrationObjectStore(Protocol):
@@ -684,7 +686,7 @@ async def _record_error(connection: Any, item_id: UUID, error: Exception) -> Non
     """
     update private_media_migration_items
     set last_error = $2, updated_at = now()
-    where id = $1 and status not in ('completed', 'rolled_back')
+    where id = $1 and status not in ('completed', 'discarded', 'rolled_back')
     """,
     item_id,
     f"{error.__class__.__name__}: {error}"[:500],
@@ -1144,10 +1146,10 @@ async def verify_private_media_batch(
   object_store: MigrationObjectStore | None = None,
 ) -> BatchResult:
   store = object_store or S3Service(settings)
-  await _require_batch_statuses(
+  status_counts = await _require_batch_statuses(
     connection,
     batch_id,
-    allowed={"switched", "verified"},
+    allowed={"switched", "verified", "discarded"},
     operation="verify",
   )
   items = await _batch_items(connection, batch_id, set(VERIFIABLE_STATUSES))
@@ -1182,7 +1184,13 @@ async def verify_private_media_batch(
     except Exception as error:
       await _record_error(connection, item_id, error)
       failed += 1
-  return BatchResult(batch_id, len(items), succeeded, failed)
+  return BatchResult(
+    batch_id,
+    len(items),
+    succeeded,
+    failed,
+    skipped=status_counts.get("discarded") or 0,
+  )
 
 
 def cloudfront_paths_for_item(item: dict[str, Any]) -> tuple[str, ...]:
@@ -1211,12 +1219,365 @@ async def batch_cloudfront_paths(connection: Any, batch_id: UUID) -> tuple[str, 
   items = await _batch_items(
     connection,
     batch_id,
-    {"switched", "verified", "cleanup_pending", "completed"},
+    {"switched", "verified", "cleanup_pending", "completed", "discard_pending", "discarded"},
   )
   paths: list[str] = []
   for item in items:
     paths.extend(cloudfront_paths_for_item(item))
   return tuple(dict.fromkeys(paths))
+
+
+async def _assert_media_asset_has_zero_references(
+  connection: Any,
+  *,
+  media_asset_id: UUID,
+) -> None:
+  row = await connection.fetchrow(
+    """
+    select count(*)::integer as reference_count
+    from (
+      select upload.id
+      from media_upload_sessions upload
+      where upload.media_asset_id = $1
+      union all
+      select capture.id
+      from photo_captures capture
+      where capture.media_id = $1
+      union all
+      select report.id
+      from analysis_reports report
+      where report.deleted_at is null
+        and $1 in (report.source_media_id, report.preview_media_id, report.golden_mask_media_id)
+      union all
+      select analysis.id
+      from hair_analyses analysis
+      where $1 in (analysis.source_media_id, analysis.mask_media_id)
+      union all
+      select simulation.id
+      from hair_simulations simulation
+      where simulation.result_media_id = $1
+      union all
+      select report.id
+      from filter_extraction_reports report
+      where report.result_media_id = $1
+      union all
+      select report.id
+      from makeup_feedback_reports report
+      where report.uploaded_media_id = $1
+    ) media_refs
+    """,
+    media_asset_id,
+  )
+  if row is None or int(row["reference_count"] or 0) != 0:
+    raise RuntimeError("Invalid legacy media asset is still referenced; discard refused.")
+
+
+def _assert_media_asset_matches_source_snapshot(
+  item: dict[str, Any],
+  media: dict[str, Any],
+) -> None:
+  if media.get("status") != "active" or media.get("deleted_at") is not None:
+    raise RuntimeError("Media asset is no longer an active legacy source.")
+  if media.get("media_kind") != item.get("media_kind"):
+    raise RuntimeError("Media asset kind changed after migration planning.")
+  state = _json_object(item.get("source_state"))
+  for field in (
+    "owner_user_id",
+    "bucket",
+    "object_key",
+    "cdn_url",
+    "thumbnail_bucket",
+    "thumbnail_object_key",
+    "thumbnail_cdn_url",
+    "thumbnail_content_type",
+    "thumbnail_byte_size",
+    "thumbnail_width",
+    "thumbnail_height",
+    "content_type",
+    "byte_size",
+    "width",
+    "height",
+    "checksum_sha256",
+  ):
+    expected = state.get(field)
+    actual = media.get(field)
+    if field == "owner_user_id":
+      expected = str(expected) if expected is not None else None
+      actual = str(actual) if actual is not None else None
+    if actual != expected:
+      raise RuntimeError(f"Media asset {field} changed after migration planning.")
+  if state.get("bucket") != item.get("source_bucket"):
+    raise RuntimeError("Ledger source bucket does not match its immutable snapshot.")
+  if state.get("object_key") != item.get("source_object_key"):
+    raise RuntimeError("Ledger source key does not match its immutable snapshot.")
+
+
+def _require_stable_object_identity(
+  *,
+  label: str,
+  before: dict[str, str | None],
+  after: dict[str, str | None],
+) -> None:
+  if before.get("exists") != "true" or after.get("exists") != "true":
+    raise RuntimeError(f"{label} object is missing; discard refused.")
+  if before != after:
+    raise RuntimeError(f"{label} object changed while discard evidence was collected.")
+
+
+async def discard_invalid_private_media_item(
+  connection: Any,
+  settings: Settings,
+  *,
+  batch_id: UUID,
+  cloudfront_distribution_id: str,
+  cloudfront_invalidation_id: str,
+  object_store: MigrationObjectStore | None = None,
+  invalidation_verifier: InvalidationVerifier | None = None,
+) -> tuple[BatchResult, tuple[str, ...]]:
+  """Permanently discard one exact, unreferenced four-byte legacy JPEG.
+
+  This recovery path is intentionally narrower than normal cleanup. It only
+  accepts a failed ``media_asset`` ledger item whose database snapshot and S3
+  identity are unchanged and whose entire payload is the JPEG SOI/EOI marker.
+  """
+  distribution_id = cloudfront_distribution_id.strip()
+  invalidation_id = cloudfront_invalidation_id.strip()
+  if not distribution_id:
+    raise ValueError("A CloudFront distribution id is required before invalid-source deletion.")
+  if not invalidation_id:
+    raise ValueError("A completed CloudFront invalidation id is required before invalid-source deletion.")
+
+  await _require_batch_statuses(
+    connection,
+    batch_id,
+    allowed={
+      "switched",
+      "verified",
+      "cleanup_pending",
+      "completed",
+      "failed",
+      "discard_pending",
+      "discarded",
+    },
+    operation="discard invalid media from",
+  )
+  candidates = await _batch_items(connection, batch_id, {"failed", "discard_pending"})
+  if len(candidates) != 1:
+    raise RuntimeError("Discard requires exactly one failed or pending item in the specified batch.")
+  item = candidates[0]
+  if item.get("resource_type") != MEDIA_ASSET_RESOURCE:
+    raise RuntimeError("Only a failed media_asset may use invalid-source discard.")
+
+  item_id = UUID(str(item["id"]))
+  resource_id = UUID(str(item["resource_id"]))
+  invalidated_paths = cloudfront_paths_for_item(item)
+  if not invalidated_paths:
+    raise RuntimeError("Discard refused because the item has no exact legacy CloudFront paths.")
+  verifier = invalidation_verifier or CloudFrontInvalidationVerifier(settings)
+  verifier.require_completed(
+    distribution_id=distribution_id,
+    invalidation_id=invalidation_id,
+    expected_paths=invalidated_paths,
+  )
+
+  store = object_store or S3Service(settings)
+  source_bucket = str(item["source_bucket"])
+  source_key = str(item["source_object_key"])
+  state = _json_object(item.get("source_state"))
+  thumbnail_bucket = state.get("thumbnail_bucket")
+  thumbnail_key = state.get("thumbnail_object_key")
+  if bool(thumbnail_bucket) != bool(thumbnail_key):
+    raise RuntimeError("Legacy thumbnail location is incomplete; discard refused.")
+  manifest_hash = hashlib.sha256("\n".join(invalidated_paths).encode("utf-8")).hexdigest()
+
+  if item["status"] == "failed":
+    media_row = await connection.fetchrow("select * from media_assets where id = $1", resource_id)
+    if media_row is None:
+      raise RuntimeError("Failed media asset no longer exists; discard refused.")
+    _assert_media_asset_matches_source_snapshot(item, dict(media_row))
+    await _assert_media_asset_has_zero_references(connection, media_asset_id=resource_id)
+    source_identity_before = store.get_object_identity(bucket=source_bucket, object_key=source_key)
+    source_body, source_content_type = store.get_object_bytes(
+      bucket=source_bucket,
+      object_key=source_key,
+      max_bytes=len(EMPTY_JPEG_BYTES),
+    )
+    source_identity_after = store.get_object_identity(bucket=source_bucket, object_key=source_key)
+    _require_stable_object_identity(
+      label="Legacy source",
+      before=source_identity_before,
+      after=source_identity_after,
+    )
+    if source_body != EMPTY_JPEG_BYTES:
+      raise RuntimeError("Legacy source is not the exact reviewed four-byte empty JPEG.")
+    if _normalized_content_type(source_content_type) not in {"image/jpeg", "image/jpg"}:
+      raise RuntimeError("Legacy source content type is not JPEG.")
+    if state.get("byte_size") != len(EMPTY_JPEG_BYTES):
+      raise RuntimeError("Legacy source size does not match the migration snapshot.")
+    snapshot_checksum = str(state.get("checksum_sha256") or "").strip().lower()
+    if snapshot_checksum and snapshot_checksum != EMPTY_JPEG_SHA256:
+      raise RuntimeError("Legacy source checksum does not match the migration snapshot.")
+    if item.get("source_etag") and item.get("source_etag") != source_identity_after.get("etag"):
+      raise RuntimeError("Legacy source ETag changed after the failed migration.")
+    if item.get("source_version_id") and item.get("source_version_id") != source_identity_after.get("version_id"):
+      raise RuntimeError("Legacy source version changed after the failed migration.")
+
+    thumbnail_identity: dict[str, str | None] | None = None
+    if thumbnail_bucket and thumbnail_key:
+      thumb_bucket = str(thumbnail_bucket)
+      thumb_key = str(thumbnail_key)
+      thumbnail_identity_before = store.get_object_identity(bucket=thumb_bucket, object_key=thumb_key)
+      thumbnail_identity_after = store.get_object_identity(bucket=thumb_bucket, object_key=thumb_key)
+      _require_stable_object_identity(
+        label="Legacy thumbnail",
+        before=thumbnail_identity_before,
+        after=thumbnail_identity_after,
+      )
+      thumbnail_identity = thumbnail_identity_after
+    evidence = {
+      "discardedSource": {
+        "byteSize": len(source_body),
+        "checksumSha256": EMPTY_JPEG_SHA256,
+        "etag": source_identity_after.get("etag"),
+        "versionId": source_identity_after.get("version_id"),
+      },
+      "discardedThumbnail": (
+        {
+          "etag": thumbnail_identity.get("etag"),
+          "versionId": thumbnail_identity.get("version_id"),
+        }
+        if thumbnail_identity
+        else None
+      ),
+    }
+    async with connection.transaction():
+      locked_item_row = await connection.fetchrow(
+        "select * from private_media_migration_items where id = $1 for update",
+        item_id,
+      )
+      if locked_item_row is None or locked_item_row["status"] != "failed":
+        raise RuntimeError("Migration item is no longer a failed discard candidate.")
+      locked_item = dict(locked_item_row)
+      locked_media_row = await connection.fetchrow(
+        "select * from media_assets where id = $1 for update",
+        resource_id,
+      )
+      if locked_media_row is None:
+        raise RuntimeError("Failed media asset disappeared before discard.")
+      _assert_media_asset_matches_source_snapshot(locked_item, dict(locked_media_row))
+      await _assert_media_asset_has_zero_references(connection, media_asset_id=resource_id)
+      if store.get_object_identity(bucket=source_bucket, object_key=source_key) != source_identity_after:
+        raise RuntimeError("Legacy source identity changed before discard was staged.")
+      await connection.execute(
+        """
+        update media_assets
+        set status = 'deletion_pending', cdn_url = null, thumbnail_cdn_url = null
+        where id = $1 and status = 'active' and deleted_at is null
+        """,
+        resource_id,
+      )
+      await connection.execute(
+        """
+        update private_media_migration_items
+        set status = 'discard_pending', discard_pending_at = coalesce(discard_pending_at, now()),
+            source_checksum_sha256 = $2, source_etag = $3, source_version_id = $4,
+            cloudfront_distribution_id = $5, cloudfront_invalidation_id = $6,
+            cloudfront_path_manifest_sha256 = $7,
+            cloudfront_invalidated_at = coalesce(cloudfront_invalidated_at, now()),
+            source_state = source_state || $8::jsonb, updated_at = now()
+        where id = $1 and status = 'failed'
+        """,
+        item_id,
+        EMPTY_JPEG_SHA256,
+        source_identity_after.get("etag"),
+        source_identity_after.get("version_id"),
+        distribution_id,
+        invalidation_id,
+        manifest_hash,
+        _serialize_json({"discardEvidence": evidence}),
+      )
+    item = {
+      **item,
+      "status": "discard_pending",
+      "source_checksum_sha256": EMPTY_JPEG_SHA256,
+      "source_etag": source_identity_after.get("etag"),
+      "source_version_id": source_identity_after.get("version_id"),
+      "source_state": {**state, "discardEvidence": evidence},
+    }
+  else:
+    if item.get("source_checksum_sha256") != EMPTY_JPEG_SHA256:
+      raise RuntimeError("Pending discard does not contain the reviewed empty-JPEG checksum.")
+    if item.get("cloudfront_distribution_id") != distribution_id:
+      raise RuntimeError("Pending discard CloudFront distribution does not match.")
+    if item.get("cloudfront_invalidation_id") != invalidation_id:
+      raise RuntimeError("Pending discard CloudFront invalidation does not match.")
+    if item.get("cloudfront_path_manifest_sha256") != manifest_hash:
+      raise RuntimeError("Pending discard CloudFront path manifest changed.")
+
+  state = _json_object(item.get("source_state"))
+  evidence = _json_object(state.get("discardEvidence"))
+  source_evidence = _json_object(evidence.get("discardedSource"))
+  if source_evidence.get("checksumSha256") != EMPTY_JPEG_SHA256:
+    raise RuntimeError("Pending discard has no valid empty-JPEG evidence.")
+  locations: list[tuple[str, str, dict[str, Any]]] = [
+    (source_bucket, source_key, source_evidence),
+  ]
+  if thumbnail_bucket and thumbnail_key:
+    thumbnail_evidence = _json_object(evidence.get("discardedThumbnail"))
+    if not thumbnail_evidence:
+      raise RuntimeError("Pending discard has no immutable thumbnail evidence.")
+    locations.append((str(thumbnail_bucket), str(thumbnail_key), thumbnail_evidence))
+
+  try:
+    async with connection.transaction():
+      locked_item_row = await connection.fetchrow(
+        "select * from private_media_migration_items where id = $1 for update",
+        item_id,
+      )
+      if locked_item_row is None or locked_item_row["status"] != "discard_pending":
+        raise RuntimeError("Migration item is no longer pending discard completion.")
+      locked_media_row = await connection.fetchrow(
+        "select * from media_assets where id = $1 for update",
+        resource_id,
+      )
+      if locked_media_row is None or locked_media_row["status"] != "deletion_pending":
+        raise RuntimeError("Media asset is no longer pending deletion.")
+      if locked_media_row["deleted_at"] is not None:
+        raise RuntimeError("Media asset was independently deleted while discard was pending.")
+      await _assert_media_asset_has_zero_references(connection, media_asset_id=resource_id)
+      for bucket, object_key, expected in locations:
+        current = store.get_object_identity(bucket=bucket, object_key=object_key)
+        if current.get("exists") == "true":
+          if current.get("etag") != expected.get("etag") or current.get("version_id") != expected.get("versionId"):
+            raise RuntimeError("Legacy object identity changed before permanent deletion.")
+          store.delete_object_permanently(bucket=bucket, object_key=object_key)
+        deleted_identity = store.get_object_identity(bucket=bucket, object_key=object_key)
+        if deleted_identity.get("exists") != "false":
+          raise RuntimeError("Legacy object still exists after permanent deletion.")
+      for bucket, object_key, _expected in locations:
+        if store.get_object_identity(bucket=bucket, object_key=object_key).get("exists") != "false":
+          raise RuntimeError("Legacy object reappeared before discard completion.")
+      await connection.execute(
+        """
+        update media_assets
+        set status = 'deleted', deleted_at = coalesce(deleted_at, now()),
+            cdn_url = null, thumbnail_cdn_url = null
+        where id = $1 and status = 'deletion_pending' and deleted_at is null
+        """,
+        resource_id,
+      )
+      await connection.execute(
+        """
+        update private_media_migration_items
+        set status = 'discarded', discarded_at = coalesce(discarded_at, now()), updated_at = now()
+        where id = $1 and status = 'discard_pending'
+        """,
+        item_id,
+      )
+  except Exception as error:
+    await _record_error(connection, item_id, error)
+    raise
+  return BatchResult(batch_id, 1, 1, 0), invalidated_paths
 
 
 async def _assert_legacy_location_unreferenced(
@@ -1276,7 +1637,7 @@ async def cleanup_private_media_batch(
   status_counts = await _require_batch_statuses(
     connection,
     batch_id,
-    allowed={"verified", "cleanup_pending", "completed"},
+    allowed={"verified", "cleanup_pending", "completed", "discarded"},
     operation="clean up",
   )
   invalidated_paths = list(await batch_cloudfront_paths(connection, batch_id))
@@ -1354,10 +1715,10 @@ async def cleanup_private_media_batch(
   return (
     BatchResult(
       batch_id,
-      len(items) + (status_counts.get("completed") or 0),
+      len(items) + (status_counts.get("completed") or 0) + (status_counts.get("discarded") or 0),
       succeeded + (status_counts.get("completed") or 0),
       failed,
-      skipped=status_counts.get("completed") or 0,
+      skipped=(status_counts.get("completed") or 0) + (status_counts.get("discarded") or 0),
     ),
     tuple(dict.fromkeys(invalidated_paths)),
   )

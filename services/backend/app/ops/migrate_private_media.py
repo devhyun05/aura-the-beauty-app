@@ -14,6 +14,7 @@ from app.services.private_media_migration import (
   batch_cloudfront_paths,
   build_plan_report,
   cleanup_private_media_batch,
+  discard_invalid_private_media_item,
   execute_private_media_migration,
   plan_private_media_migration,
   rollback_private_media_batch,
@@ -32,7 +33,7 @@ def _parser() -> argparse.ArgumentParser:
     "command",
     nargs="?",
     default="plan",
-    choices=("plan", "execute", "verify", "cleanup", "rollback"),
+    choices=("plan", "execute", "verify", "cleanup", "discard-invalid", "rollback"),
   )
   parser.add_argument("--database-url", default=None)
   parser.add_argument("--batch-id", type=UUID)
@@ -123,6 +124,27 @@ async def run(args: argparse.Namespace) -> int:
       if not args.cloudfront_distribution_id:
         raise RuntimeError("cleanup requires --cloudfront-distribution-id")
       result, invalidated_paths = await cleanup_private_media_batch(
+        connection,
+        settings,
+        batch_id=args.batch_id,
+        cloudfront_distribution_id=args.cloudfront_distribution_id,
+        cloudfront_invalidation_id=args.cloudfront_invalidation_id,
+      )
+      payload = _result_payload(result)
+      payload["invalidatedPaths"] = list(invalidated_paths)
+      print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+      return 1 if result.failed else 0
+
+    if args.command == "discard-invalid":
+      if not args.confirm_source_deletion:
+        raise RuntimeError("discard-invalid requires --confirm-source-deletion")
+      if not args.cloudfront_invalidation_id:
+        raise RuntimeError(
+          "discard-invalid requires --cloudfront-invalidation-id from a completed invalidation",
+        )
+      if not args.cloudfront_distribution_id:
+        raise RuntimeError("discard-invalid requires --cloudfront-distribution-id")
+      result, invalidated_paths = await discard_invalid_private_media_item(
         connection,
         settings,
         batch_id=args.batch_id,

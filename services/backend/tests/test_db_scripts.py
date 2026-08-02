@@ -395,6 +395,15 @@ def test_private_media_migration_ledger_is_registered_for_resumable_cutover() ->
   assert "idx_private_media_migration_batch_status" in normalized
   assert "idx_private_media_migration_status_retry" in normalized
 
+  discarded_sql = POST_SCHEMA_MIGRATIONS["schema.sql:private-media-migration-discarded-v2"]
+  discarded_normalized = " ".join(discarded_sql.lower().split())
+  assert "add column if not exists discard_pending_at timestamptz" in discarded_normalized
+  assert "add column if not exists discarded_at timestamptz" in discarded_normalized
+  assert "'discard_pending'" in discarded_normalized
+  assert "'discarded'" in discarded_normalized
+  assert "chk_private_media_migration_discarded_state" in discarded_normalized
+  assert "32461d5bd1773012acef0ba15636752949bd7c2ce50f9172159d9f56cf0dd9af" in discarded_normalized
+
 
 def test_golden_mask_constraint_accepts_legacy_and_owner_scoped_private_paths() -> None:
   for version in (

@@ -118,6 +118,7 @@ EXPECTED_CONSTRAINTS = {
     "chk_private_media_migration_checksum_format",
     "chk_private_media_migration_copied_state",
     "chk_private_media_migration_completed_state",
+    "chk_private_media_migration_discarded_state",
     "chk_private_media_migration_source_state",
   },
   "analysis_reports": {
@@ -289,6 +290,8 @@ EXPECTED_COLUMNS = {
     "cloudfront_invalidation_id",
     "cloudfront_path_manifest_sha256",
     "cloudfront_invalidated_at",
+    "discard_pending_at",
+    "discarded_at",
   },
   # A5 (schema.sql:auradin-events-v1) — §7.2 이벤트 스키마 정본
   "auradin_events": {

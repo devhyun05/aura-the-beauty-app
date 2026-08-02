@@ -17,6 +17,7 @@ from app.services.private_media_migration import (
   batch_cloudfront_paths,
   build_plan_report,
   cleanup_private_media_batch,
+  discard_invalid_private_media_item,
   migrate_candidate,
   plan_private_media_migration,
   rollback_private_media_batch,
@@ -213,6 +214,8 @@ class MigrationConnection:
     self.media = dict(candidate.source_state)
     self.media["id"] = candidate.resource_id
     self.media["media_kind"] = candidate.media_kind
+    self.media["status"] = "active"
+    self.media["deleted_at"] = None
     self.is_referenced = False
 
   def transaction(self):
@@ -257,6 +260,8 @@ class MigrationConnection:
       return dict(self.ledger) if self.ledger is not None else None
     if "as is_referenced" in normalized:
       return {"is_referenced": self.is_referenced}
+    if "as reference_count" in normalized:
+      return {"reference_count": 1 if self.is_referenced else 0}
     if "from media_assets" in normalized:
       return dict(self.media)
     raise AssertionError(normalized)
@@ -292,6 +297,28 @@ class MigrationConnection:
           self.ledger["cloudfront_path_manifest_sha256"] = args[3]
       elif "status = 'completed'" in normalized:
         self.ledger["status"] = "completed"
+      elif "set status = 'discarded'" in normalized:
+        self.ledger["status"] = "discarded"
+        self.ledger["discarded_at"] = "now"
+        if len(args) > 1:
+          self.ledger["source_checksum_sha256"] = args[1]
+          self.ledger["source_etag"] = args[2]
+          self.ledger["source_version_id"] = args[3]
+          self.ledger["cloudfront_distribution_id"] = args[4]
+          self.ledger["cloudfront_invalidation_id"] = args[5]
+          self.ledger["cloudfront_path_manifest_sha256"] = args[6]
+      elif "set status = 'discard_pending'" in normalized:
+        self.ledger["status"] = "discard_pending"
+        self.ledger["discard_pending_at"] = "now"
+        self.ledger["source_checksum_sha256"] = args[1]
+        self.ledger["source_etag"] = args[2]
+        self.ledger["source_version_id"] = args[3]
+        self.ledger["cloudfront_distribution_id"] = args[4]
+        self.ledger["cloudfront_invalidation_id"] = args[5]
+        self.ledger["cloudfront_path_manifest_sha256"] = args[6]
+        source_state = json.loads(self.ledger["source_state"])
+        source_state.update(json.loads(args[7]))
+        self.ledger["source_state"] = json.dumps(source_state)
       elif "status = 'rolled_back'" in normalized:
         self.ledger["status"] = "rolled_back"
       elif "status = 'rollback_pending'" in normalized:
@@ -300,7 +327,16 @@ class MigrationConnection:
         self.ledger["status"] = "failed"
       return "UPDATE 1"
     if normalized.startswith("update media_assets"):
-      if "owner_user_id = $2" in normalized and len(args) == 9:
+      if "status = 'deleted'" in normalized:
+        self.media["status"] = "deleted"
+        self.media["deleted_at"] = "now"
+        self.media["cdn_url"] = None
+        self.media["thumbnail_cdn_url"] = None
+      elif "status = 'deletion_pending'" in normalized:
+        self.media["status"] = "deletion_pending"
+        self.media["cdn_url"] = None
+        self.media["thumbnail_cdn_url"] = None
+      elif "owner_user_id = $2" in normalized and len(args) == 9:
         self.media.update(
           {
             "owner_user_id": args[1],
@@ -701,6 +737,244 @@ async def test_cleanup_requires_completed_invalidation_evidence() -> None:
       cloudfront_invalidation_id="",
       object_store=object(),
     )
+
+
+def _failed_empty_jpeg_migration() -> tuple[MigrationCandidate, MigrationConnection, MemoryObjectStore]:
+  body = b"\xff\xd8\xff\xd9"
+  candidate = _media_candidate(
+    media_kind="face-analysis-source",
+    body=body,
+    content_type="image/jpeg",
+    extension=".jpg",
+    width=None,
+    height=None,
+  )
+  connection = MigrationConnection(candidate)
+  store = MemoryObjectStore(candidate, body=body, content_type="image/jpeg")
+  identity = store.get_object_identity(
+    bucket=candidate.source_bucket,
+    object_key=candidate.source_object_key,
+  )
+  connection.ledger = {
+    "id": LEDGER_ID,
+    "batch_id": BATCH_ID,
+    "resource_type": MEDIA_ASSET_RESOURCE,
+    "resource_id": candidate.resource_id,
+    "owner_user_id": candidate.owner_user_id,
+    "media_kind": candidate.media_kind,
+    "source_bucket": candidate.source_bucket,
+    "source_object_key": candidate.source_object_key,
+    "source_cdn_url": candidate.source_cdn_url,
+    "source_state": json.dumps(candidate.source_state, default=str),
+    "source_etag": identity["etag"],
+    "source_version_id": identity["version_id"],
+    "status": "failed",
+    "attempts": 1,
+    "last_error": "UnidentifiedImageError: cannot identify image file",
+  }
+  return candidate, connection, store
+
+
+@pytest.mark.asyncio
+async def test_discard_invalid_empty_jpeg_is_audited_and_terminal() -> None:
+  candidate, connection, store = _failed_empty_jpeg_migration()
+  invalidation = CompletedInvalidation()
+
+  result, paths = await discard_invalid_private_media_item(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    cloudfront_distribution_id="E123456789",
+    cloudfront_invalidation_id="I-COMPLETED-123",
+    object_store=store,
+    invalidation_verifier=invalidation,
+  )
+
+  assert result.succeeded == 1
+  assert result.failed == 0
+  assert paths == (f"/uploads/face-analysis-source/{MEDIA_ID}.jpg",)
+  assert store.deleted == [(candidate.source_bucket, candidate.source_object_key)]
+  assert connection.media["status"] == "deleted"
+  assert connection.media["deleted_at"] == "now"
+  assert connection.ledger["status"] == "discarded"
+  assert connection.ledger["discarded_at"] == "now"
+  assert connection.ledger["source_checksum_sha256"] == hashlib.sha256(b"\xff\xd8\xff\xd9").hexdigest()
+  assert invalidation.calls == [
+    (
+      "E123456789",
+      "I-COMPLETED-123",
+      (f"/uploads/face-analysis-source/{MEDIA_ID}.jpg",),
+    ),
+  ]
+  assert await batch_cloudfront_paths(connection, BATCH_ID) == paths
+
+  verified = await verify_private_media_batch(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    object_store=store,
+  )
+  assert verified.attempted == 0
+  assert verified.skipped == 1
+
+  cleaned, cleanup_paths = await cleanup_private_media_batch(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    cloudfront_distribution_id="E123456789",
+    cloudfront_invalidation_id="I-COMPLETED-123",
+    object_store=store,
+    invalidation_verifier=CompletedInvalidation(),
+  )
+  assert cleaned.attempted == 1
+  assert cleaned.succeeded == 0
+  assert cleaned.skipped == 1
+  assert cleanup_paths == paths
+
+
+@pytest.mark.asyncio
+async def test_discard_invalid_resumes_after_source_was_deleted_in_pending_state() -> None:
+  candidate, connection, store = _failed_empty_jpeg_migration()
+  paths = (f"/uploads/face-analysis-source/{MEDIA_ID}.jpg",)
+  identity = store.get_object_identity(
+    bucket=candidate.source_bucket,
+    object_key=candidate.source_object_key,
+  )
+  state = json.loads(connection.ledger["source_state"])
+  state["discardEvidence"] = {
+    "discardedSource": {
+      "byteSize": 4,
+      "checksumSha256": hashlib.sha256(b"\xff\xd8\xff\xd9").hexdigest(),
+      "etag": identity["etag"],
+      "versionId": identity["version_id"],
+    },
+    "discardedThumbnail": None,
+  }
+  connection.ledger.update(
+    {
+      "status": "discard_pending",
+      "discard_pending_at": "earlier",
+      "source_checksum_sha256": hashlib.sha256(b"\xff\xd8\xff\xd9").hexdigest(),
+      "cloudfront_distribution_id": "E123456789",
+      "cloudfront_invalidation_id": "I-COMPLETED-123",
+      "cloudfront_path_manifest_sha256": hashlib.sha256("\n".join(paths).encode()).hexdigest(),
+      "source_state": json.dumps(state),
+    },
+  )
+  connection.media["status"] = "deletion_pending"
+  connection.media["cdn_url"] = None
+  store.delete_object_permanently(
+    bucket=candidate.source_bucket,
+    object_key=candidate.source_object_key,
+  )
+
+  result, resumed_paths = await discard_invalid_private_media_item(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    cloudfront_distribution_id="E123456789",
+    cloudfront_invalidation_id="I-COMPLETED-123",
+    object_store=store,
+    invalidation_verifier=CompletedInvalidation(),
+  )
+
+  assert result.succeeded == 1
+  assert resumed_paths == paths
+  assert connection.ledger["status"] == "discarded"
+  assert connection.media["status"] == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_pending_discard_rechecks_references_before_deleting_source() -> None:
+  candidate, connection, store = _failed_empty_jpeg_migration()
+  paths = (f"/uploads/face-analysis-source/{MEDIA_ID}.jpg",)
+  identity = store.get_object_identity(
+    bucket=candidate.source_bucket,
+    object_key=candidate.source_object_key,
+  )
+  state = json.loads(connection.ledger["source_state"])
+  state["discardEvidence"] = {
+    "discardedSource": {
+      "byteSize": 4,
+      "checksumSha256": hashlib.sha256(b"\xff\xd8\xff\xd9").hexdigest(),
+      "etag": identity["etag"],
+      "versionId": identity["version_id"],
+    },
+    "discardedThumbnail": None,
+  }
+  connection.ledger.update(
+    {
+      "status": "discard_pending",
+      "source_checksum_sha256": hashlib.sha256(b"\xff\xd8\xff\xd9").hexdigest(),
+      "cloudfront_distribution_id": "E123456789",
+      "cloudfront_invalidation_id": "I-COMPLETED-123",
+      "cloudfront_path_manifest_sha256": hashlib.sha256("\n".join(paths).encode()).hexdigest(),
+      "source_state": json.dumps(state),
+    },
+  )
+  connection.media["status"] = "deletion_pending"
+  connection.media["cdn_url"] = None
+  connection.is_referenced = True
+
+  with pytest.raises(RuntimeError, match="still referenced"):
+    await discard_invalid_private_media_item(
+      connection,
+      _settings(),
+      batch_id=BATCH_ID,
+      cloudfront_distribution_id="E123456789",
+      cloudfront_invalidation_id="I-COMPLETED-123",
+      object_store=store,
+      invalidation_verifier=CompletedInvalidation(),
+    )
+
+  assert store.deleted == []
+  assert connection.ledger["status"] == "discard_pending"
+  assert connection.media["status"] == "deletion_pending"
+
+
+@pytest.mark.asyncio
+async def test_discard_invalid_rejects_any_payload_beyond_exact_empty_jpeg() -> None:
+  candidate, connection, store = _failed_empty_jpeg_migration()
+  store.objects[(candidate.source_bucket, candidate.source_object_key)] = (
+    b"\xff\xd8\xff\xd9\x00",
+    "image/jpeg",
+  )
+
+  with pytest.raises(RuntimeError, match="object too large"):
+    await discard_invalid_private_media_item(
+      connection,
+      _settings(),
+      batch_id=BATCH_ID,
+      cloudfront_distribution_id="E123456789",
+      cloudfront_invalidation_id="I-COMPLETED-123",
+      object_store=store,
+      invalidation_verifier=CompletedInvalidation(),
+    )
+
+  assert store.deleted == []
+  assert connection.media["status"] == "active"
+  assert connection.ledger["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_discard_invalid_rejects_referenced_media_asset() -> None:
+  _candidate_value, connection, store = _failed_empty_jpeg_migration()
+  connection.is_referenced = True
+
+  with pytest.raises(RuntimeError, match="still referenced"):
+    await discard_invalid_private_media_item(
+      connection,
+      _settings(),
+      batch_id=BATCH_ID,
+      cloudfront_distribution_id="E123456789",
+      cloudfront_invalidation_id="I-COMPLETED-123",
+      object_store=store,
+      invalidation_verifier=CompletedInvalidation(),
+    )
+
+  assert store.deleted == []
+  assert connection.media["status"] == "active"
+  assert connection.ledger["status"] == "failed"
 
 
 @pytest.mark.asyncio

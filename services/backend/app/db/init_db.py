@@ -1262,6 +1262,43 @@ POST_SCHEMA_MIGRATIONS = {
         'planned', 'copied', 'switched', 'verified', 'cleanup_pending', 'failed', 'rollback_pending'
       );
   """,
+  "schema.sql:private-media-migration-discarded-v2": """
+    alter table private_media_migration_items
+      add column if not exists discard_pending_at timestamptz,
+      add column if not exists discarded_at timestamptz;
+
+    alter table private_media_migration_items
+      drop constraint if exists chk_private_media_migration_status,
+      add constraint chk_private_media_migration_status check (
+        status in (
+          'planned', 'copied', 'switched', 'verified', 'cleanup_pending',
+          'completed', 'failed', 'discard_pending', 'discarded',
+          'rollback_pending', 'rolled_back'
+        )
+      ),
+      drop constraint if exists chk_private_media_migration_discarded_state,
+      add constraint chk_private_media_migration_discarded_state check (
+        status not in ('discard_pending', 'discarded')
+        or (
+          resource_type = 'media_asset'
+          and source_checksum_sha256 = '32461d5bd1773012acef0ba15636752949bd7c2ce50f9172159d9f56cf0dd9af'
+          and cloudfront_distribution_id is not null
+          and cloudfront_invalidation_id is not null
+          and cloudfront_path_manifest_sha256 is not null
+          and cloudfront_invalidated_at is not null
+          and discard_pending_at is not null
+          and (status <> 'discarded' or discarded_at is not null)
+        )
+      );
+
+    drop index if exists idx_private_media_migration_status_retry;
+    create index idx_private_media_migration_status_retry
+      on private_media_migration_items (status, updated_at)
+      where status in (
+        'planned', 'copied', 'switched', 'verified', 'cleanup_pending',
+        'failed', 'discard_pending', 'rollback_pending'
+      );
+  """,
 }
 # NOTE(M3 후속): 동일 (user_id, source_media_id) in-flight 중복을 막는 부분 유니크
 # 인덱스는 이 POST_SCHEMA_MIGRATIONS(단일 트랜잭션)로는 CONCURRENTLY 불가 →
