@@ -233,11 +233,13 @@ Resources:
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/hair-simulation-result/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/golden-mask/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*
-          - Sid: InspectExactLegacyMediaVersions
+          - Sid: ReadLegacyMediaBucketVersioning
             Effect: Allow
-            Action:
-              - s3:GetBucketVersioning
-              - s3:ListBucketVersions
+            Action: s3:GetBucketVersioning
+            Resource: !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}
+          - Sid: ListExactLegacyMediaVersions
+            Effect: Allow
+            Action: s3:ListBucketVersions
             Resource: !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}
             Condition:
               StringLike:

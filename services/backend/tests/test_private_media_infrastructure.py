@@ -88,6 +88,14 @@ def test_legacy_migration_permissions_are_temporary_and_scoped() -> None:
   assert "cloudfront:GetDistribution" in template
   assert "cloudfront:GetInvalidation" in template
   assert "cloudfront:CreateInvalidation" not in template
+  assert "Sid: ReadLegacyMediaBucketVersioning" in template
+  assert "Sid: ListExactLegacyMediaVersions" in template
+  versioning_statement = template.split("Sid: ReadLegacyMediaBucketVersioning", 1)[1].split(
+    "Sid: ListExactLegacyMediaVersions",
+    1,
+  )[0]
+  assert "s3:GetBucketVersioning" in versioning_statement
+  assert "Condition:" not in versioning_statement
   assert "${LegacyPublicMediaBucketName}/uploads/face-analysis-source/*" in template
   assert "${LegacyPublicMediaBucketName}/uploads/optimized/analysis-previews/*" in template
   for prefix in (
