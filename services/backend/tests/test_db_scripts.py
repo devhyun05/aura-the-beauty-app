@@ -397,15 +397,20 @@ def test_private_media_migration_ledger_is_registered_for_resumable_cutover() ->
 
 
 def test_golden_mask_constraint_accepts_legacy_and_owner_scoped_private_paths() -> None:
-  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:golden-mask-private-user-path-v1"]
-  normalized = " ".join(migration_sql.lower().split())
+  for version in (
+    "schema.sql:golden-mask-private-user-path-v1",
+    "schema.sql:golden-mask-private-constraint-v2",
+  ):
+    migration_sql = POST_SCHEMA_MIGRATIONS[version]
+    normalized = " ".join(migration_sql.lower().split())
 
-  assert "drop constraint if exists chk_media_assets_golden_mask_private" in normalized
-  assert "uploads/golden-mask/%.auragm" in normalized
-  assert (
-    "private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm"
-    in normalized
-  )
+    assert "drop constraint if exists chk_media_assets_golden_mask_private" in normalized
+    assert "content_type is not null" in normalized
+    assert "uploads/golden-mask/%.auragm" in normalized
+    assert (
+      "private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm"
+      in normalized
+    )
   constraint_contract = EXPECTED_CONSTRAINT_CONTRACTS[
     "chk_media_assets_golden_mask_private"
   ]

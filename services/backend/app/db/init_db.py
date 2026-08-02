@@ -82,6 +82,28 @@ POST_SCHEMA_MIGRATIONS = {
         or (
           cdn_url is null
           and bucket is not null
+          and content_type is not null
+          and content_type = 'application/vnd.aura.golden-mask'
+          and object_key is not null
+          and (
+            object_key like 'uploads/golden-mask/%.auragm'
+            or object_key like 'private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm'
+          )
+        )
+      );
+  """,
+  # The v1 migration was applied in production before the explicit NOT NULL
+  # contract was restored. Keep this additive version so already-migrated
+  # databases receive the corrected constraint on the next deploy.
+  "schema.sql:golden-mask-private-constraint-v2": """
+    alter table media_assets
+      drop constraint if exists chk_media_assets_golden_mask_private,
+      add constraint chk_media_assets_golden_mask_private check (
+        media_kind <> 'golden-mask'
+        or (
+          cdn_url is null
+          and bucket is not null
+          and content_type is not null
           and content_type = 'application/vnd.aura.golden-mask'
           and object_key is not null
           and (
