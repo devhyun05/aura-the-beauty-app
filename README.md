@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./apps/mobile/ios/AURA/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png" width="112" alt="AURA 앱 아이콘">
+  <img src="./docs/readme/aura-app-icon.png" width="112" alt="AURA 앱 아이콘">
 </p>
 
 <h1 align="center">AURA</h1>
