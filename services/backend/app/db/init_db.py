@@ -74,6 +74,23 @@ POST_SCHEMA_MIGRATIONS = {
       on analysis_reports (golden_mask_media_id)
       where golden_mask_media_id is not null;
   """,
+  "schema.sql:golden-mask-private-user-path-v1": """
+    alter table media_assets
+      drop constraint if exists chk_media_assets_golden_mask_private,
+      add constraint chk_media_assets_golden_mask_private check (
+        media_kind <> 'golden-mask'
+        or (
+          cdn_url is null
+          and bucket is not null
+          and content_type = 'application/vnd.aura.golden-mask'
+          and object_key is not null
+          and (
+            object_key like 'uploads/golden-mask/%.auragm'
+            or object_key like 'private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm'
+          )
+        )
+      );
+  """,
   "schema.sql:makeup-journey-v1": """
     alter table makeup_feedback_reports
       add column if not exists entry_date date,

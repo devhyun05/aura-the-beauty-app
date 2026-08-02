@@ -129,6 +129,10 @@ Resources:
             Resource:
               - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
               - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-source/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-mask/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-simulation-result/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/golden-mask/*
               - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
             Condition:
               "Null":
@@ -140,6 +144,10 @@ Resources:
             Resource:
               - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
               - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-source/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-mask/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-simulation-result/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/golden-mask/*
               - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
             Condition:
               StringNotEquals:
@@ -169,6 +177,10 @@ Resources:
             Resource:
               - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
               - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-source/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-mask/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-simulation-result/*
+              - !Sub ${PrivateMediaBucket.Arn}/uploads/golden-mask/*
               - !Sub ${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*
           - Sid: ReadPrivateMediaBucketVersioning
             Effect: Allow
@@ -183,6 +195,10 @@ Resources:
                 s3:prefix:
                   - uploads/staging/user-media/*
                   - private/user-media/*
+                  - uploads/hair-analysis-source/*
+                  - uploads/hair-analysis-mask/*
+                  - uploads/hair-simulation-result/*
+                  - uploads/golden-mask/*
                   - !Sub ${MakeupPrivateAssetPrefix}/*
 
   LegacyMediaMigrationTaskPolicy:
@@ -212,6 +228,10 @@ Resources:
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/makeup_feedback-thumbnail/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/optimized/analysis-previews/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/hair-analysis-source/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/hair-analysis-mask/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/hair-simulation-result/*
+              - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/uploads/golden-mask/*
               - !Sub arn:${AWS::Partition}:s3:::${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*
           - Sid: InspectExactLegacyMediaVersions
             Effect: Allow
@@ -231,6 +251,10 @@ Resources:
                   - uploads/makeup_feedback/*
                   - uploads/makeup_feedback-thumbnail/*
                   - uploads/optimized/analysis-previews/*
+                  - uploads/hair-analysis-source/*
+                  - uploads/hair-analysis-mask/*
+                  - uploads/hair-simulation-result/*
+                  - uploads/golden-mask/*
                   - !Sub ${MakeupPrivateAssetPrefix}/*
           - Sid: VerifyLegacyCloudFrontInvalidations
             Effect: Allow

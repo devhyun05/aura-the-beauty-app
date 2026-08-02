@@ -64,6 +64,14 @@ def test_private_media_task_roles_have_prefix_scoped_minimum_permissions() -> No
     assert action in template
   assert "${PrivateMediaBucket.Arn}/uploads/staging/user-media/*" in template
   assert "${PrivateMediaBucket.Arn}/private/user-media/*" in template
+  for prefix in (
+    "hair-analysis-source",
+    "hair-analysis-mask",
+    "hair-simulation-result",
+    "golden-mask",
+  ):
+    assert f"${{PrivateMediaBucket.Arn}}/uploads/{prefix}/*" in template
+    assert f"- uploads/{prefix}/*" in template
   assert "${PrivateMediaBucket.Arn}/${MakeupPrivateAssetPrefix}/*" in template
   assert "arn:aws:s3:::*" not in template
   assert "s3:ListAllMyBuckets" not in template
@@ -82,8 +90,18 @@ def test_legacy_migration_permissions_are_temporary_and_scoped() -> None:
   assert "cloudfront:CreateInvalidation" not in template
   assert "${LegacyPublicMediaBucketName}/uploads/face-analysis-source/*" in template
   assert "${LegacyPublicMediaBucketName}/uploads/optimized/analysis-previews/*" in template
+  for prefix in (
+    "hair-analysis-source",
+    "hair-analysis-mask",
+    "hair-simulation-result",
+    "golden-mask",
+  ):
+    assert f"${{LegacyPublicMediaBucketName}}/uploads/{prefix}/*" in template
+    assert f"- uploads/{prefix}/*" in template
   assert "${LegacyPublicMediaBucketName}/${MakeupPrivateAssetPrefix}/*" in template
   assert "${LegacyPublicMediaBucketName}/uploads/analysis-preview/*" not in template
+  assert "${PrivateMediaBucket.Arn}/uploads/profile-avatar/*" not in template
+  assert "${PrivateMediaBucket.Arn}/uploads/community-thread/*" not in template
 
 
 def test_private_media_stack_output_is_wired_into_backend_deployment() -> None:

@@ -128,7 +128,10 @@ create table if not exists media_assets (
       and content_type is not null
       and content_type = 'application/vnd.aura.golden-mask'
       and object_key is not null
-      and object_key like 'uploads/golden-mask/%.auragm'
+      and (
+        object_key like 'uploads/golden-mask/%.auragm'
+        or object_key like 'private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm'
+      )
     )
   )
 );
@@ -144,7 +147,10 @@ alter table media_assets
       and content_type is not null
       and content_type = 'application/vnd.aura.golden-mask'
       and object_key is not null
-      and object_key like 'uploads/golden-mask/%.auragm'
+      and (
+        object_key like 'uploads/golden-mask/%.auragm'
+        or object_key like 'private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm'
+      )
     )
   );
 

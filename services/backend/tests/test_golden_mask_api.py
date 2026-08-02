@@ -834,7 +834,9 @@ def test_golden_mask_presign_is_private_encrypted_and_has_no_cdn(monkeypatch) ->
 
   service = S3Service(
     Settings(
-      s3_bucket_name="private-bucket",
+      environment="production",
+      s3_bucket_name="public-media",
+      private_media_bucket_name="private-media",
       cdn_base_url="https://cdn.example.com",
     ),
   )
@@ -846,9 +848,26 @@ def test_golden_mask_presign_is_private_encrypted_and_has_no_cdn(monkeypatch) ->
   )
 
   assert upload["object_key"].endswith(".auragm")
+  assert upload["bucket"] == "private-media"
   assert upload["cdn_url"] is None
   assert upload["cache_control"] == "private, no-store"
   assert upload["server_side_encryption"] == "AES256"
   assert upload["headers"]["x-amz-server-side-encryption"] == "AES256"
   assert captured["CacheControl"] == "private, no-store"
+  assert captured["Bucket"] == "private-media"
   assert captured["ServerSideEncryption"] == "AES256"
+
+
+def test_migrated_golden_mask_owner_path_is_recognized_as_private() -> None:
+  owner_id = uuid4()
+  media_id = uuid4()
+  checksum = "a" * 64
+
+  assert is_private_golden_mask_object_key(
+    f"private/user-media/users/{owner_id}/golden-mask/legacy/"
+    f"media_asset/{media_id}/{checksum}.auragm",
+  )
+  assert not is_private_golden_mask_object_key(
+    f"private/user-media/users/{owner_id}/face-analysis-source/legacy/"
+    f"media_asset/{media_id}/{checksum}.auragm",
+  )

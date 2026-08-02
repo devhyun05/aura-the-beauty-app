@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
+import struct
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -11,6 +13,12 @@ from uuid import UUID
 import boto3
 
 from app.core.errors import AppError
+from app.core.media_policy import (
+  GOLDEN_MASK_CONTENT_TYPE,
+  GOLDEN_MASK_MAX_BYTES,
+  GOLDEN_MASK_MEDIA_KIND,
+  GOLDEN_MASK_SCHEMA_VERSION,
+)
 from app.core.settings import Settings
 from app.services.media_uploads import SENSITIVE_UPLOAD_MAX_BYTES, sanitize_sensitive_image
 from app.services.s3 import PRIVATE_USER_MEDIA_OBJECT_PREFIX, S3Service
@@ -22,6 +30,10 @@ LEGACY_SENSITIVE_MEDIA_KINDS = (
   "capture",
   "face-analysis-source",
   "filter-extraction",
+  GOLDEN_MASK_MEDIA_KIND,
+  "hair-analysis-mask",
+  "hair-analysis-source",
+  "hair-simulation-result",
   "makeup_feedback",
   "analysis-preview",
 )
@@ -33,6 +45,9 @@ VERIFIABLE_STATUSES = frozenset({"switched", "verified"})
 ROLLBACK_STATUSES = frozenset(
   {"copied", "switched", "verified", "failed", "rollback_pending"},
 )
+HAIR_MASK_MEDIA_KIND = "hair-analysis-mask"
+GOLDEN_MASK_MAGIC = b"AUGM"
+GOLDEN_MASK_FORMAT_VERSION = 1
 
 
 class MigrationObjectStore(Protocol):
@@ -161,6 +176,14 @@ class BatchResult:
   skipped: int = 0
 
 
+@dataclass(frozen=True)
+class PreparedMigrationObject:
+  body: bytes
+  content_type: str
+  width: int | None
+  height: int | None
+
+
 def _json_object(value: object) -> dict[str, Any]:
   if isinstance(value, dict):
     return dict(value)
@@ -273,6 +296,19 @@ async def _fetch_legacy_media_asset_rows(
         from analysis_reports report
         where report.deleted_at is null
           and media.id in (report.source_media_id, report.preview_media_id)
+        union
+        select report.user_id
+        from analysis_reports report
+        where report.deleted_at is null
+          and report.golden_mask_media_id = media.id
+        union
+        select analysis.user_id
+        from hair_analyses analysis
+        where media.id in (analysis.source_media_id, analysis.mask_media_id)
+        union
+        select simulation.user_id
+        from hair_simulations simulation
+        where simulation.result_media_id = media.id
         union
         select report.user_id
         from filter_extraction_reports report
@@ -452,11 +488,128 @@ def _safe_path_component(value: str) -> str:
   return normalized or "media"
 
 
+def _target_extension(media_kind: str) -> str:
+  if media_kind == HAIR_MASK_MEDIA_KIND:
+    return ".png"
+  if media_kind == GOLDEN_MASK_MEDIA_KIND:
+    return ".auragm"
+  return ".jpg"
+
+
 def target_object_key(candidate: MigrationCandidate, checksum_sha256: str) -> str:
   return (
     f"{PRIVATE_USER_MEDIA_OBJECT_PREFIX}users/{candidate.owner_user_id}/"
     f"{_safe_path_component(candidate.media_kind)}/legacy/"
-    f"{candidate.resource_type}/{candidate.resource_id}/{checksum_sha256}.jpg"
+    f"{candidate.resource_type}/{candidate.resource_id}/{checksum_sha256}"
+    f"{_target_extension(candidate.media_kind)}"
+  )
+
+
+def _read_dotnet_string(payload: bytes, offset: int) -> tuple[str, int]:
+  length = 0
+  shift = 0
+  for _ in range(5):
+    if offset >= len(payload):
+      raise RuntimeError("Golden Mask schema header is truncated.")
+    current = payload[offset]
+    offset += 1
+    length |= (current & 0x7F) << shift
+    if current & 0x80 == 0:
+      end = offset + length
+      if end > len(payload):
+        raise RuntimeError("Golden Mask schema header is truncated.")
+      try:
+        return payload[offset:end].decode("utf-8"), end
+      except UnicodeDecodeError as error:
+        raise RuntimeError("Golden Mask schema header is not valid UTF-8.") from error
+    shift += 7
+  raise RuntimeError("Golden Mask schema header length is invalid.")
+
+
+def _validate_golden_mask_bytes(body: bytes) -> None:
+  minimum_size = len(GOLDEN_MASK_MAGIC) + 4 + 1 + 32
+  if len(body) < minimum_size or len(body) > GOLDEN_MASK_MAX_BYTES:
+    raise RuntimeError("Golden Mask file size is outside the reviewed limit.")
+  payload = body[:-32]
+  expected_checksum = body[-32:]
+  if not hmac.compare_digest(hashlib.sha256(payload).digest(), expected_checksum):
+    raise RuntimeError("Golden Mask embedded checksum is invalid.")
+  if payload[: len(GOLDEN_MASK_MAGIC)] != GOLDEN_MASK_MAGIC:
+    raise RuntimeError("Golden Mask magic header is invalid.")
+  version_offset = len(GOLDEN_MASK_MAGIC)
+  if len(payload) < version_offset + 4:
+    raise RuntimeError("Golden Mask version header is truncated.")
+  format_version = struct.unpack_from("<i", payload, version_offset)[0]
+  if format_version != GOLDEN_MASK_FORMAT_VERSION:
+    raise RuntimeError("Golden Mask format version is unsupported.")
+  schema_version, _ = _read_dotnet_string(payload, version_offset + 4)
+  if schema_version != GOLDEN_MASK_SCHEMA_VERSION:
+    raise RuntimeError("Golden Mask schema version is unsupported.")
+
+
+def _normalized_content_type(value: object) -> str:
+  return str(value or "").split(";", 1)[0].strip().lower()
+
+
+def _prepare_migration_object(
+  *,
+  media_kind: str,
+  source_bytes: bytes,
+  source_content_type: str,
+  source_state: dict[str, Any],
+) -> PreparedMigrationObject:
+  normalized_s3_content_type = _normalized_content_type(source_content_type)
+  normalized_db_content_type = _normalized_content_type(source_state.get("content_type"))
+
+  if media_kind == GOLDEN_MASK_MEDIA_KIND:
+    reviewed_content_type = (
+      normalized_s3_content_type
+      if normalized_s3_content_type == GOLDEN_MASK_CONTENT_TYPE
+      else normalized_db_content_type
+    )
+    if reviewed_content_type != GOLDEN_MASK_CONTENT_TYPE:
+      raise RuntimeError("Legacy Golden Mask has no reviewed content type.")
+    if normalized_s3_content_type not in {
+      "",
+      "application/octet-stream",
+      "binary/octet-stream",
+      GOLDEN_MASK_CONTENT_TYPE,
+    }:
+      raise RuntimeError("Legacy Golden Mask S3 content type conflicts with its media kind.")
+    _validate_golden_mask_bytes(source_bytes)
+    return PreparedMigrationObject(
+      body=source_bytes,
+      content_type=GOLDEN_MASK_CONTENT_TYPE,
+      width=None,
+      height=None,
+    )
+
+  expected_content_type = (
+    normalized_s3_content_type
+    if normalized_s3_content_type in LEGACY_IMAGE_CONTENT_TYPES
+    else normalized_db_content_type
+  )
+  if expected_content_type not in LEGACY_IMAGE_CONTENT_TYPES:
+    raise RuntimeError("Legacy source has no reviewed image content type.")
+  if media_kind == HAIR_MASK_MEDIA_KIND and expected_content_type != "image/png":
+    raise RuntimeError("Legacy hair mask must be a PNG image.")
+
+  sanitized = sanitize_sensitive_image(
+    source_bytes,
+    expected_content_type=expected_content_type,
+  )
+  if media_kind == HAIR_MASK_MEDIA_KIND:
+    return PreparedMigrationObject(
+      body=source_bytes,
+      content_type="image/png",
+      width=sanitized.width,
+      height=sanitized.height,
+    )
+  return PreparedMigrationObject(
+    body=sanitized.body,
+    content_type=sanitized.content_type,
+    width=sanitized.width,
+    height=sanitized.height,
   )
 
 
@@ -547,8 +700,8 @@ async def _switch_media_asset(
   checksum: str,
   content_type: str,
   byte_size: int,
-  width: int,
-  height: int,
+  width: int | None,
+  height: int | None,
 ) -> None:
   resource_id = item["resource_id"]
   current = await connection.fetchrow(
@@ -748,24 +901,17 @@ async def migrate_candidate(
     if source_identity_before != source_identity_after:
       raise RuntimeError("Legacy source changed while it was being copied.")
     source_state = _json_object(item.get("source_state"))
-    normalized_s3_content_type = source_content_type.split(";", 1)[0].strip().lower()
-    normalized_db_content_type = str(source_state.get("content_type") or "").split(";", 1)[0].strip().lower()
-    expected_content_type = (
-      normalized_s3_content_type
-      if normalized_s3_content_type in LEGACY_IMAGE_CONTENT_TYPES
-      else normalized_db_content_type
-    )
-    if expected_content_type not in LEGACY_IMAGE_CONTENT_TYPES:
-      raise RuntimeError("Legacy source has no reviewed image content type.")
-    sanitized = sanitize_sensitive_image(
-      source_bytes,
-      expected_content_type=expected_content_type,
+    prepared = _prepare_migration_object(
+      media_kind=str(item["media_kind"]),
+      source_bytes=source_bytes,
+      source_content_type=source_content_type,
+      source_state=source_state,
     )
     source_checksum = hashlib.sha256(source_bytes).hexdigest()
     expected_source_checksum = str(source_state.get("checksum_sha256") or "").strip().lower()
     if expected_source_checksum and expected_source_checksum != source_checksum:
       raise RuntimeError("Legacy source checksum does not match the database record.")
-    target_checksum = hashlib.sha256(sanitized.body).hexdigest()
+    target_checksum = hashlib.sha256(prepared.body).hexdigest()
     target_bucket = store.private_media_bucket()
     ledger_candidate = MigrationCandidate(
       resource_type=str(item["resource_type"]),
@@ -801,8 +947,8 @@ async def migrate_candidate(
     store.put_private_object(
       bucket=target_bucket,
       object_key=target_key,
-      body=sanitized.body,
-      content_type=sanitized.content_type,
+      body=prepared.body,
+      content_type=prepared.content_type,
       tags={
         "aura-migration-batch": str(batch_id),
         "aura-resource-id": str(candidate.resource_id),
@@ -858,10 +1004,10 @@ async def migrate_candidate(
           target_bucket=target_bucket,
           target_key=target_key,
           checksum=target_checksum,
-          content_type=sanitized.content_type,
-          byte_size=len(sanitized.body),
-          width=sanitized.width,
-          height=sanitized.height,
+          content_type=prepared.content_type,
+          byte_size=len(prepared.body),
+          width=prepared.width,
+          height=prepared.height,
         )
       else:
         await _switch_recommendation_asset(
@@ -869,7 +1015,7 @@ async def migrate_candidate(
           item=item,
           target_bucket=target_bucket,
           target_key=target_key,
-          content_type=sanitized.content_type,
+          content_type=prepared.content_type,
         )
       await connection.execute(
         """

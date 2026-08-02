@@ -611,6 +611,7 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "content_type = 'application/vnd.aura.golden-mask'::text",
     "object_key is not null",
     "object_key ~~ 'uploads/golden-mask/%.auragm'::text",
+    "object_key ~~ 'private/user-media/users/%/golden-mask/legacy/media_asset/%/%.auragm'::text",
   ),
   "fk_analysis_reports_golden_mask_media": (
     "foreign key (golden_mask_media_id)",

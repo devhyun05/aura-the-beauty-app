@@ -1,5 +1,6 @@
 import hashlib
 import json
+import struct
 from io import BytesIO
 from uuid import UUID, uuid4
 
@@ -7,6 +8,7 @@ import pytest
 from PIL import Image
 
 from app.ops.optimize_analysis_previews import CACHE_CONTROL, object_key_for
+from app.core.media_policy import GOLDEN_MASK_CONTENT_TYPE
 from app.core.settings import Settings
 from app.services.private_media_migration import (
   MEDIA_ASSET_RESOURCE,
@@ -34,6 +36,58 @@ def _image_bytes() -> bytes:
   image = Image.new("RGB", (48, 40), (184, 126, 104))
   image.save(output, format="PNG")
   return output.getvalue()
+
+
+def _golden_mask_bytes() -> bytes:
+  schema_version = b"aura.golden-mask.v1"
+  payload = (
+    b"AUGM"
+    + struct.pack("<i", 1)
+    + bytes([len(schema_version)])
+    + schema_version
+    + b"migration-test-payload"
+  )
+  return payload + hashlib.sha256(payload).digest()
+
+
+def _media_candidate(
+  *,
+  media_kind: str,
+  body: bytes,
+  content_type: str,
+  extension: str,
+  width: int | None,
+  height: int | None,
+) -> MigrationCandidate:
+  object_key = f"uploads/{media_kind}/{MEDIA_ID}{extension}"
+  return MigrationCandidate(
+    resource_type=MEDIA_ASSET_RESOURCE,
+    resource_id=MEDIA_ID,
+    owner_user_id=OWNER_ID,
+    media_kind=media_kind,
+    source_bucket="legacy-public",
+    source_object_key=object_key,
+    source_cdn_url=f"https://cdn.example.com/{object_key}",
+    source_state={
+      "owner_user_id": OWNER_ID,
+      "bucket": "legacy-public",
+      "object_key": object_key,
+      "cdn_url": f"https://cdn.example.com/{object_key}",
+      "thumbnail_bucket": None,
+      "thumbnail_object_key": None,
+      "thumbnail_cdn_url": None,
+      "thumbnail_content_type": None,
+      "thumbnail_byte_size": None,
+      "thumbnail_width": None,
+      "thumbnail_height": None,
+      "content_type": content_type,
+      "byte_size": len(body),
+      "width": width,
+      "height": height,
+      "checksum_sha256": None,
+    },
+    byte_size=len(body),
+  )
 
 
 def _candidate() -> MigrationCandidate:
@@ -64,10 +118,19 @@ def _candidate() -> MigrationCandidate:
 
 
 class MemoryObjectStore:
-  def __init__(self, candidate: MigrationCandidate) -> None:
+  def __init__(
+    self,
+    candidate: MigrationCandidate,
+    *,
+    body: bytes | None = None,
+    content_type: str | None = None,
+  ) -> None:
     self.bucket = "private-media"
     self.objects = {
-      (candidate.source_bucket, candidate.source_object_key): (_image_bytes(), "image/png"),
+      (candidate.source_bucket, candidate.source_object_key): (
+        body if body is not None else _image_bytes(),
+        content_type or "image/png",
+      ),
     }
     self.put_count = 0
     self.deleted: list[tuple[str, str]] = []
@@ -281,9 +344,11 @@ class PlanningConnection:
   def __init__(self) -> None:
     self.fetch_count = 0
     self.write_count = 0
+    self.queries: list[tuple[str, tuple]] = []
 
   async def fetch(self, query, *args):
     self.fetch_count += 1
+    self.queries.append((query, args))
     if "from media_assets media" in query:
       conflict_owner = uuid4()
       return [
@@ -345,6 +410,21 @@ async def test_plan_is_read_only_and_excludes_ambiguous_owners() -> None:
   assert connection.fetch_count == 2
   assert connection.write_count == 0
 
+  media_query, media_args = connection.queries[0]
+  normalized_query = " ".join(media_query.lower().split())
+  for owner_reference in (
+    "report.golden_mask_media_id = media.id",
+    "media.id in (analysis.source_media_id, analysis.mask_media_id)",
+    "simulation.result_media_id = media.id",
+  ):
+    assert owner_reference in normalized_query
+  assert {
+    "golden-mask",
+    "hair-analysis-mask",
+    "hair-analysis-source",
+    "hair-simulation-result",
+  }.issubset(set(media_args[0]))
+
 
 def test_target_key_is_owner_scoped_and_content_addressed() -> None:
   checksum = "a" * 64
@@ -355,6 +435,128 @@ def test_target_key_is_owner_scoped_and_content_addressed() -> None:
     f"private/user-media/users/{OWNER_ID}/face-analysis-source/legacy/"
     f"media_asset/{MEDIA_ID}/{checksum}.jpg"
   )
+
+
+def test_target_key_preserves_non_jpeg_private_formats() -> None:
+  checksum = "b" * 64
+  hair_mask = _media_candidate(
+    media_kind="hair-analysis-mask",
+    body=_image_bytes(),
+    content_type="image/png",
+    extension=".png",
+    width=48,
+    height=40,
+  )
+  golden_mask = _media_candidate(
+    media_kind="golden-mask",
+    body=_golden_mask_bytes(),
+    content_type=GOLDEN_MASK_CONTENT_TYPE,
+    extension=".auragm",
+    width=None,
+    height=None,
+  )
+
+  assert target_object_key(hair_mask, checksum).endswith(f"/{checksum}.png")
+  assert target_object_key(golden_mask, checksum).endswith(f"/{checksum}.auragm")
+
+
+@pytest.mark.asyncio
+async def test_hair_mask_migration_preserves_png_bytes_and_dimensions() -> None:
+  body = _image_bytes()
+  candidate = _media_candidate(
+    media_kind="hair-analysis-mask",
+    body=body,
+    content_type="image/png",
+    extension=".png",
+    width=48,
+    height=40,
+  )
+  connection = MigrationConnection(candidate)
+  store = MemoryObjectStore(candidate, body=body, content_type="image/png")
+
+  assert await migrate_candidate(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    candidate=candidate,
+    object_store=store,
+  ) == "switched"
+
+  target_key = str(connection.ledger["target_object_key"])
+  target_body, target_content_type = store.objects[(store.bucket, target_key)]
+  assert target_key.endswith(".png")
+  assert target_body == body
+  assert target_content_type == "image/png"
+  assert connection.media["content_type"] == "image/png"
+  assert connection.media["width"] == 48
+  assert connection.media["height"] == 40
+
+
+@pytest.mark.asyncio
+async def test_golden_mask_migration_preserves_validated_artifact_bytes() -> None:
+  body = _golden_mask_bytes()
+  candidate = _media_candidate(
+    media_kind="golden-mask",
+    body=body,
+    content_type=GOLDEN_MASK_CONTENT_TYPE,
+    extension=".auragm",
+    width=None,
+    height=None,
+  )
+  connection = MigrationConnection(candidate)
+  store = MemoryObjectStore(candidate, body=body, content_type=GOLDEN_MASK_CONTENT_TYPE)
+
+  assert await migrate_candidate(
+    connection,
+    _settings(),
+    batch_id=BATCH_ID,
+    candidate=candidate,
+    object_store=store,
+  ) == "switched"
+
+  target_key = str(connection.ledger["target_object_key"])
+  target_body, target_content_type = store.objects[(store.bucket, target_key)]
+  assert target_key.endswith(".auragm")
+  assert target_body == body
+  assert target_content_type == GOLDEN_MASK_CONTENT_TYPE
+  assert connection.media["width"] is None
+  assert connection.media["height"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("body", "s3_content_type"),
+  [
+    (b"not-a-golden-mask", GOLDEN_MASK_CONTENT_TYPE),
+    (_golden_mask_bytes(), "text/plain"),
+  ],
+)
+async def test_golden_mask_migration_rejects_invalid_artifacts(
+  body: bytes,
+  s3_content_type: str,
+) -> None:
+  candidate = _media_candidate(
+    media_kind="golden-mask",
+    body=body,
+    content_type=GOLDEN_MASK_CONTENT_TYPE,
+    extension=".auragm",
+    width=None,
+    height=None,
+  )
+  connection = MigrationConnection(candidate)
+  store = MemoryObjectStore(candidate, body=body, content_type=s3_content_type)
+
+  with pytest.raises(RuntimeError):
+    await migrate_candidate(
+      connection,
+      _settings(),
+      batch_id=BATCH_ID,
+      candidate=candidate,
+      object_store=store,
+    )
+
+  assert connection.ledger["status"] == "failed"
+  assert store.put_count == 0
 
 
 def test_new_analysis_previews_are_private_and_owner_scoped() -> None:

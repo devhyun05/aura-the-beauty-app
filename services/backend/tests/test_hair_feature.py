@@ -173,7 +173,14 @@ def test_hair_upload_is_private_and_has_no_cdn_url(monkeypatch: pytest.MonkeyPat
       assert ExpiresIn == 900
       return "https://upload.example.com/private"
 
-  service = S3Service(Settings(s3_bucket_name="private-bucket", cdn_base_url="https://cdn.example.com"))
+  service = S3Service(
+    Settings(
+      environment="production",
+      s3_bucket_name="public-media",
+      private_media_bucket_name="private-media",
+      cdn_base_url="https://cdn.example.com",
+    ),
+  )
   monkeypatch.setattr(service, "_client", lambda: Client())
 
   upload = service.create_presigned_upload(
@@ -184,7 +191,11 @@ def test_hair_upload_is_private_and_has_no_cdn_url(monkeypatch: pytest.MonkeyPat
 
   assert upload["cdn_url"] is None
   assert upload["cache_control"] == "private, no-store"
+  assert upload["bucket"] == "private-media"
   assert captured["CacheControl"] == "private, no-store"
+  assert captured["Bucket"] == "private-media"
+  assert captured["ServerSideEncryption"] == "AES256"
+  assert upload["headers"]["x-amz-server-side-encryption"] == "AES256"
   assert is_private_hair_object_key(str(upload["object_key"])) is True
   assert is_private_hair_object_key("uploads/community/photo.jpg") is False
 

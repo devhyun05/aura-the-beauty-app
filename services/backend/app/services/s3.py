@@ -28,6 +28,11 @@ SENSITIVE_USER_MEDIA_KINDS = {
   "filter-extraction",
   "makeup_feedback",
 }
+ISOLATED_PRIVATE_MEDIA_KINDS = (
+  SENSITIVE_USER_MEDIA_KINDS
+  | PRIVATE_HAIR_MEDIA_KINDS
+  | {GOLDEN_MASK_MEDIA_KIND}
+)
 PRIVATE_USER_MEDIA_STAGING_PREFIX = "uploads/staging/user-media/"
 PRIVATE_USER_MEDIA_OBJECT_PREFIX = "private/user-media/"
 PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX = "uploads/generated-makeup-recommendations/"
@@ -54,7 +59,11 @@ def is_private_hair_object_key(object_key: str) -> bool:
 
 
 def is_private_golden_mask_object_key(object_key: str) -> bool:
-  return object_key.startswith(PRIVATE_GOLDEN_MASK_OBJECT_PREFIX)
+  return object_key.startswith(PRIVATE_GOLDEN_MASK_OBJECT_PREFIX) or (
+    object_key.startswith(PRIVATE_USER_MEDIA_OBJECT_PREFIX)
+    and "/golden-mask/legacy/media_asset/" in object_key
+    and object_key.endswith(".auragm")
+  )
 
 
 def is_private_user_media_object_key(object_key: str) -> bool:
@@ -138,7 +147,13 @@ class S3Service:
       private_bucket
       and bucket == private_bucket
       and object_key.startswith(
-        (PRIVATE_USER_MEDIA_STAGING_PREFIX, PRIVATE_USER_MEDIA_OBJECT_PREFIX, private_makeup_prefix),
+        (
+          PRIVATE_USER_MEDIA_STAGING_PREFIX,
+          PRIVATE_USER_MEDIA_OBJECT_PREFIX,
+          private_makeup_prefix,
+          *PRIVATE_HAIR_OBJECT_PREFIXES,
+          PRIVATE_GOLDEN_MASK_OBJECT_PREFIX,
+        ),
       )
     )
     if (
@@ -165,20 +180,20 @@ class S3Service:
     original_filename: str | None,
     expires_in: int = 900,
   ) -> dict[str, str | int | None | dict[str, str]]:
-    if not self.settings.s3_bucket_name and media_kind not in SENSITIVE_USER_MEDIA_KINDS:
+    if not self.settings.s3_bucket_name and media_kind not in ISOLATED_PRIVATE_MEDIA_KINDS:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for uploads.")
 
     extension = upload_extension_for_content_type(content_type)
 
     is_sensitive_user_media = media_kind in SENSITIVE_USER_MEDIA_KINDS
-    bucket = self.private_media_bucket() if is_sensitive_user_media else self.settings.s3_bucket_name
+    is_isolated_private_media = media_kind in ISOLATED_PRIVATE_MEDIA_KINDS
+    bucket = self.private_media_bucket() if is_isolated_private_media else self.settings.s3_bucket_name
     object_key = (
       f"{PRIVATE_USER_MEDIA_STAGING_PREFIX}{uuid4()}{extension}"
       if is_sensitive_user_media
       else f"uploads/{media_kind}/{uuid4()}{extension}"
     )
-    is_golden_mask = media_kind == GOLDEN_MASK_MEDIA_KIND
-    is_private_media = is_sensitive_user_media or media_kind in PRIVATE_HAIR_MEDIA_KINDS or is_golden_mask
+    is_private_media = is_isolated_private_media
     cache_control = "private, no-store" if is_private_media else "public, max-age=31536000, immutable"
     put_params = {
       "Bucket": bucket,
@@ -187,7 +202,7 @@ class S3Service:
       "CacheControl": cache_control,
     }
     required_headers: dict[str, str] | None = None
-    if is_golden_mask or is_sensitive_user_media:
+    if is_isolated_private_media:
       put_params["ServerSideEncryption"] = "AES256"
       required_headers = {
         "Content-Type": content_type,

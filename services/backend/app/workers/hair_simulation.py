@@ -140,9 +140,7 @@ async def process_analysis_job(db: Database, settings: Settings, job_id: UUID) -
     )
     if not mask_quality.get("passed"):
       raise AppError(422, "HAIR_MASK_LOW_CONFIDENCE", "Hair could not be isolated reliably.")
-    bucket = settings.s3_bucket_name
-    if not bucket:
-      raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required.")
+    bucket = s3.private_media_bucket()
     mask_key = f"uploads/hair-analysis-mask/{uuid4()}.png"
     await asyncio.to_thread(
       s3.put_private_object,
@@ -250,12 +248,12 @@ async def process_simulation_job(db: Database, settings: Settings, job_id: UUID)
   if media is None or media["analysis_status"] != "completed":
     raise AppError(409, "HAIR_ANALYSIS_NOT_READY", "Hair analysis is not ready for simulation.")
 
-  bucket = settings.s3_bucket_name
-  asset_bucket = settings.hair_style_asset_bucket or bucket
-  if not bucket or not asset_bucket:
+  s3 = S3Service(settings)
+  bucket = s3.private_media_bucket()
+  asset_bucket = settings.hair_style_asset_bucket or settings.s3_bucket_name
+  if not asset_bucket:
     raise AppError(503, "S3_NOT_CONFIGURED", "Hair simulation storage is not configured.")
 
-  s3 = S3Service(settings)
   source_bytes, _ = await asyncio.to_thread(
     s3.get_object_bytes,
     bucket=media["source_bucket"],
