@@ -649,6 +649,41 @@ def test_app_store_face_capture_receives_legacy_recommended_makeup_contract() ->
   ]
 
 
+def test_private_app_store_face_capture_receives_legacy_recommended_makeup_contract() -> None:
+  normalized = normalize_analysis_report_row(
+    {
+      "detail_payload": {
+        "result": {
+          "stylingLooks": {
+            "natural": {
+              "title": "맑은 데일리 룩",
+              "subtitle": "여름 라이트",
+              "description": "원래 명암을 살린 자연스러운 메이크업",
+              "rows": [],
+            },
+          },
+        },
+      },
+      "source_media_ref_id": UUID("33333333-3333-3333-3333-333333333333"),
+      "source_media_ref_object_key": (
+        "private/user-media/users/44444444-4444-4444-4444-444444444444/"
+        "face-analysis-source/55555555-5555-5555-5555-555555555555/"
+        "66666666-6666-6666-6666-666666666666.jpg"
+      ),
+    },
+  )
+
+  assert normalized is not None
+  assert normalized["detail_payload"]["result"]["recommendedMakeups"] == [
+    {
+      "title": "맑은 데일리 룩",
+      "subtitle": "여름 라이트",
+      "description": "원래 명암을 살린 자연스러운 메이크업",
+      "tags": [],
+    },
+  ]
+
+
 def test_current_face_capture_does_not_restore_retired_report_recommendation() -> None:
   normalized = normalize_analysis_report_row(
     {
@@ -665,7 +700,11 @@ def test_current_face_capture_does_not_restore_retired_report_recommendation() -
         },
       },
       "source_media_ref_id": UUID("22222222-2222-2222-2222-222222222222"),
-      "source_media_ref_object_key": "uploads/capture/current-face.jpg",
+      "source_media_ref_object_key": (
+        "private/user-media/users/77777777-7777-7777-7777-777777777777/"
+        "capture/88888888-8888-8888-8888-888888888888/"
+        "99999999-9999-9999-9999-999999999999.jpg"
+      ),
     },
   )
 

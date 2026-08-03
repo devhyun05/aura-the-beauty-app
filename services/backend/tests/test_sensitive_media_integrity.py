@@ -103,6 +103,41 @@ def test_sensitive_presign_uses_isolated_staging_bucket_and_encryption(monkeypat
   assert captured["params"]["ServerSideEncryption"] == "AES256"
 
 
+def test_app_store_face_presign_uses_private_bucket_default_encryption(monkeypatch) -> None:
+  captured: dict = {}
+
+  class FakeClient:
+    def generate_presigned_url(self, operation: str, *, Params: dict, ExpiresIn: int) -> str:
+      captured.update({"operation": operation, "params": Params, "expires": ExpiresIn})
+      return "https://upload.example.com/signed"
+
+  service = S3Service(
+    Settings(
+      environment="production",
+      s3_bucket_name="public-media",
+      private_media_bucket_name="private-user-media",
+      cdn_base_url="https://cdn.example.com",
+    ),
+  )
+  monkeypatch.setattr(service, "_client", lambda: FakeClient())
+
+  result = service.create_presigned_upload(
+    "face-analysis-source",
+    "image/jpeg",
+    "face.jpg",
+  )
+
+  assert result["bucket"] == "private-user-media"
+  assert result["object_key"].startswith(PRIVATE_USER_MEDIA_STAGING_PREFIX)
+  assert result["cdn_url"] is None
+  assert result["cache_control"] == "private, no-store"
+  assert "headers" not in result
+  assert "server_side_encryption" not in result
+  assert captured["params"]["ContentType"] == "image/jpeg"
+  assert captured["params"]["CacheControl"] == "private, no-store"
+  assert "ServerSideEncryption" not in captured["params"]
+
+
 def test_sensitive_presign_fails_closed_without_private_production_bucket() -> None:
   service = S3Service(Settings(environment="production", s3_bucket_name="public-media"))
 

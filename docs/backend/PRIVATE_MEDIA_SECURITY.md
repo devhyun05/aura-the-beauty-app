@@ -49,9 +49,12 @@ gh variable set PRIVATE_MEDIA_BUCKET_NAME --body "$private_media_bucket"
 ```
 
 The template retains the bucket and TLS-only bucket policy if the stack is
-deleted or the bucket is replaced. IAM access is removed with the stack. It
-also rejects staging and final uploads that omit the explicit `AES256`
-encryption header; migration commands must therefore request SSE-S3 as well.
+deleted or the bucket is replaced. IAM access is removed with the stack.
+Legacy App Store clients cannot replay an explicit SSE header for face-analysis
+uploads, so those temporary staging PUTs use the bucket's default SSE-S3
+encryption. Current-client and server-written private uploads still require an
+explicit `AES256` header; migration commands must therefore request SSE-S3 as
+well.
 
 ## Required AWS configuration
 
@@ -59,8 +62,9 @@ encryption header; migration commands must therefore request SSE-S3 as well.
    configure its bucket as a CloudFront origin.
 2. Enable all four S3 Block Public Access settings and Object Ownership
    `BucketOwnerEnforced`.
-3. Enable default SSE-S3 encryption (`AES256`) and bucket versioning. The
-   current presigned-upload contract and bucket policy require the explicit
+3. Enable default SSE-S3 encryption (`AES256`) and bucket versioning. Legacy
+   App Store face-analysis staging uploads rely on this bucket default. Current
+   client and server-written private uploads still require the explicit
    `AES256` request header.
 4. Add a lifecycle rule that permanently expires
    `uploads/staging/user-media/` objects after one day. The API also deletes

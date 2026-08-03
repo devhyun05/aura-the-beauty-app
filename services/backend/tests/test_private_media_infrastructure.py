@@ -33,6 +33,24 @@ def test_private_media_bucket_is_private_encrypted_versioned_and_retained() -> N
   assert "PublicRead" not in template
 
 
+def test_private_media_staging_relies_on_bucket_default_encryption_for_legacy_clients() -> None:
+  template = _template()
+  deny_missing = template.split("- Sid: DenyMissingServerSideEncryptionHeader", 1)[1].split(
+    "- Sid: DenyUnexpectedServerSideEncryption",
+    1,
+  )[0]
+  deny_unexpected = template.split("- Sid: DenyUnexpectedServerSideEncryption", 1)[1].split(
+    "PrivateMediaTaskPolicy:",
+    1,
+  )[0]
+
+  assert "SSEAlgorithm: AES256" in template
+  assert "uploads/staging/user-media/*" not in deny_missing
+  assert "private/user-media/*" in deny_missing
+  assert "uploads/staging/user-media/*" in deny_unexpected
+  assert 's3:x-amz-server-side-encryption: "false"' in deny_unexpected
+
+
 def test_private_media_staging_lifecycle_removes_abandoned_versions() -> None:
   template = _template()
 

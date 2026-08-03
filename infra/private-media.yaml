@@ -127,7 +127,6 @@ Resources:
             Principal: "*"
             Action: s3:PutObject
             Resource:
-              - !Sub ${PrivateMediaBucket.Arn}/uploads/staging/user-media/*
               - !Sub ${PrivateMediaBucket.Arn}/private/user-media/*
               - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-source/*
               - !Sub ${PrivateMediaBucket.Arn}/uploads/hair-analysis-mask/*
@@ -152,6 +151,8 @@ Resources:
             Condition:
               StringNotEquals:
                 s3:x-amz-server-side-encryption: AES256
+              "Null":
+                s3:x-amz-server-side-encryption: "false"
 
   PrivateMediaTaskPolicy:
     Type: AWS::IAM::ManagedPolicy

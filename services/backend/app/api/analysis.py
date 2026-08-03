@@ -61,7 +61,11 @@ from app.services.private_media_delivery import (
   project_private_media_reference,
 )
 from app.services.report_rate_limit import enforce_report_generation_limit
-from app.services.s3 import S3Service, is_private_golden_mask_object_key
+from app.services.s3 import (
+  PRIVATE_USER_MEDIA_OBJECT_PREFIX,
+  S3Service,
+  is_private_golden_mask_object_key,
+)
 from app.services.users import ensure_user
 
 
@@ -221,10 +225,22 @@ def restore_app_store_face_report_contract(
   detail_payload: dict,
   source_object_key: object,
 ) -> dict:
-  if not (
-    isinstance(source_object_key, str)
-    and source_object_key.startswith("uploads/face-analysis-source/")
-  ):
+  is_app_store_face_source = False
+  if isinstance(source_object_key, str):
+    is_app_store_face_source = source_object_key.startswith(
+      "uploads/face-analysis-source/",
+    )
+    if source_object_key.startswith(PRIVATE_USER_MEDIA_OBJECT_PREFIX):
+      private_path = source_object_key.removeprefix(
+        PRIVATE_USER_MEDIA_OBJECT_PREFIX,
+      ).split("/")
+      is_app_store_face_source = (
+        len(private_path) >= 4
+        and private_path[0] == "users"
+        and bool(private_path[1])
+        and private_path[2] == "face-analysis-source"
+      )
+  if not is_app_store_face_source:
     return detail_payload
 
   result = detail_payload.get("result")

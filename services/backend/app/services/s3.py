@@ -202,7 +202,15 @@ class S3Service:
       "CacheControl": cache_control,
     }
     required_headers: dict[str, str] | None = None
-    if is_isolated_private_media:
+    # App Store builds released before private-media isolation do not replay
+    # server-provided SSE headers for face-analysis-source PUTs. Those uploads
+    # still land in the isolated bucket with default SSE-S3 encryption and are
+    # rewritten with explicit AES256 encryption during finalization.
+    requires_explicit_sse_header = (
+      is_isolated_private_media
+      and media_kind != "face-analysis-source"
+    )
+    if requires_explicit_sse_header:
       put_params["ServerSideEncryption"] = "AES256"
       required_headers = {
         "Content-Type": content_type,
