@@ -16,6 +16,14 @@ on:
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
     inputs:
+      mode:
+        description: Run a backend deployment or collect ECS diagnostics
+        required: false
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - diagnose
       artifact_only:
         description: Build and scan an image artifact without AWS deployment
         required: false
@@ -178,7 +186,7 @@ jobs:
           compression-level: 0
 
   deploy:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.artifact_only }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (!inputs.artifact_only && inputs.mode != 'diagnose') }}
     name: Build image and deploy service
     runs-on: ubuntu-latest
     services:
