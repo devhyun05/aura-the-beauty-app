@@ -48,6 +48,25 @@ def test_dev_deploy_routes_analysis_to_global_sonnet_46() -> None:
     assert f'"{name}"' in workflow
 
 
+def test_makeup_recommendation_timeout_fits_mobile_polling_window() -> None:
+  env_example = (PROJECT_ROOT / "services/backend/.env.example").read_text(encoding="utf-8")
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
+    encoding="utf-8",
+  )
+
+  assert Settings().makeup_recommendation_provider_timeout_seconds == 110.0
+  assert "MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS=110" in env_example
+  assert (
+    "MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS: "
+    "${{ vars.MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS || '110' }}"
+  ) in workflow
+  assert workflow.count(
+    "MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS="
+    "${{ env.MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS }}",
+  ) == 2
+  assert '"MAKEUP_RECOMMENDATION_PROVIDER_TIMEOUT_SECONDS"' in workflow
+
+
 def test_makeup_journey_deploy_smoke_covers_every_public_route() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",

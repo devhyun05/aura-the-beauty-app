@@ -823,7 +823,7 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
 
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
   assert calls[0]["max_tokens"] == 6000
-  assert calls[0]["timeout_seconds"] == 45.0
+  assert calls[0]["timeout_seconds"] == 110.0
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert result["generationSource"] == "claude"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
