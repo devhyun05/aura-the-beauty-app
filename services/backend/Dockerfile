@@ -6,11 +6,17 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libgomp1 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY services/backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade \
+      pip==26.2.1 \
+      setuptools==84.0.0 \
+      wheel==0.46.3 \
+  && python -m pip install --no-cache-dir -r requirements.txt \
+  && python -m pip uninstall -y pip setuptools wheel
 
 COPY services/backend/scripts/download_hair_segmenter.py /tmp/download_hair_segmenter.py
 RUN python /tmp/download_hair_segmenter.py --output /app/models/hair_segmenter.tflite \

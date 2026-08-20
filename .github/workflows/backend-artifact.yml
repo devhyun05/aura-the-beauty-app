@@ -1,0 +1,102 @@
+name: Backend Artifact
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "services/backend/**"
+      - "docs/backend/schema.sql"
+      - "docs/backend/seed.sql"
+      - "data/auradin/catalog/**"
+      - "data/auradin/knowledge/**"
+      - ".dockerignore"
+      - ".github/workflows/backend-artifact.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-artifact-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify backend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE_TAG: aura-backend:${{ github.sha }}
+      TRIVY_VERSION: "0.74.0"
+      TRIVY_LINUX_AMD64_SHA256: "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Linux AMD64 image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -f services/backend/Dockerfile \
+            -t "$IMAGE_TAG" \
+            .
+
+      - name: Verify runtime artifact contract
+        run: |
+          test "$(docker image inspect "$IMAGE_TAG" --format '{{.Architecture}}')" = "amd64"
+          test "$(docker image inspect "$IMAGE_TAG" --format '{{.Config.User}}')" = "appuser"
+
+          docker run --rm \
+            --platform linux/amd64 \
+            --entrypoint /bin/sh \
+            "$IMAGE_TAG" \
+            -c '
+              test -f /app/models/hair_segmenter.tflite &&
+              test -f /app/docs/backend/schema.sql &&
+              test -f /app/docs/backend/seed.sql &&
+              test -d /app/data/auradin/catalog &&
+              test -d /app/data/auradin/knowledge &&
+              test "$(id -un)" = "appuser" &&
+              python -c "import app.main; print(\"backend import: OK\")"
+            '
+
+      - name: Install pinned Trivy binary
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+
+          curl --fail --show-error --location --retry 3 --output "$archive" "$url"
+          printf '%s  %s\n' "$TRIVY_LINUX_AMD64_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Scan image for fixable high-severity vulnerabilities
+        run: |
+          trivy image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            --timeout 10m \
+            "$IMAGE_TAG"
+
+      - name: Package image artifact
+        run: |
+          artifact_name="backend-image-${GITHUB_SHA}.tar.gz"
+          docker save "$IMAGE_TAG" | gzip -9 > "$artifact_name"
+          sha256sum "$artifact_name" > "${artifact_name}.sha256"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-${{ github.sha }}
+          path: |
+            backend-image-${{ github.sha }}.tar.gz
+            backend-image-${{ github.sha }}.tar.gz.sha256
+          retention-days: 3
+          if-no-files-found: error
