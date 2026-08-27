@@ -8,6 +8,7 @@
 
 from copy import deepcopy
 import json
+from uuid import UUID
 
 from app.api.analysis import (
   ANALYSIS_MEDIA_LIST_SELECT,
@@ -613,3 +614,60 @@ def test_initial_v2_payload_does_not_project_a_report_before_ai_finishes() -> No
   assert result["faceAnalysisV2"]["schemaVersion"] == "aura-face-analysis-v2"
   assert result["faceAnalysisV2"]["pipeline"]["overall"] == "processing"
   assert set(result) == {"faceAnalysisV2"}
+
+
+def test_app_store_face_capture_receives_legacy_recommended_makeup_contract() -> None:
+  normalized = normalize_analysis_report_row(
+    {
+      "detail_payload": {
+        "result": {
+          "stylingLooks": {
+            "natural": {
+              "title": "맑은 데일리 룩",
+              "subtitle": "여름 라이트",
+              "description": "원래 명암을 살린 자연스러운 메이크업",
+              "rows": [],
+            },
+          },
+        },
+      },
+      "source_media_ref_id": UUID("11111111-1111-1111-1111-111111111111"),
+      "source_media_ref_object_key": (
+        "uploads/face-analysis-source/legacy-app-store-face.jpg"
+      ),
+    },
+  )
+
+  assert normalized is not None
+  assert normalized["detail_payload"]["result"]["recommendedMakeups"] == [
+    {
+      "title": "맑은 데일리 룩",
+      "subtitle": "여름 라이트",
+      "description": "원래 명암을 살린 자연스러운 메이크업",
+      "tags": [],
+    },
+  ]
+
+
+def test_current_face_capture_does_not_restore_retired_report_recommendation() -> None:
+  normalized = normalize_analysis_report_row(
+    {
+      "detail_payload": {
+        "result": {
+          "stylingLooks": {
+            "natural": {
+              "title": "맑은 데일리 룩",
+              "subtitle": "여름 라이트",
+              "description": "원래 명암을 살린 자연스러운 메이크업",
+              "rows": [],
+            },
+          },
+        },
+      },
+      "source_media_ref_id": UUID("22222222-2222-2222-2222-222222222222"),
+      "source_media_ref_object_key": "uploads/capture/current-face.jpg",
+    },
+  )
+
+  assert normalized is not None
+  assert "recommendedMakeups" not in normalized["detail_payload"]["result"]
